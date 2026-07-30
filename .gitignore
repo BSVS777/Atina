@@ -1,0 +1,10 @@
+# AI tooling — local config/state, not project deliverables
+.claude/
+.agents/
+.atl/
+.ai-harness/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp

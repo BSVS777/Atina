@@ -1,0 +1,5 @@
+<!-- AI-HARNESS:GENERATED -->
+
+<!-- AI-HARNESS:START -->
+@AI_HARNESS.md
+<!-- AI-HARNESS:END -->
