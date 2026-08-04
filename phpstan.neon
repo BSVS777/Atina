@@ -1,0 +1,22 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - vendor/nesbot/carbon/extension.neon
+
+parameters:
+    paths:
+        - app/
+        - bootstrap/app.php
+        - config/
+        - database/
+        - routes/
+        - src/
+
+    # Ejecutan un .sql versionado y fijo del repo (schema/seed compartido del
+    # profesor, no input dinámico) vía DB::unprepared(File::get(...)); Larastan
+    # exige literal-string ahí y no puede verificar contenido de archivo en
+    # tiempo de análisis. No es una query construida con datos externos.
+    excludePaths:
+        - database/migrations/2026_08_03_100001_create_gestion_academica_utn_shared_schema.php
+        - database/seeders/GestionAcademicaUtnSeeder.php
+
+    level: 7
