@@ -2,6 +2,7 @@
 
 use App\Models\Atestado;
 use App\Models\Docente;
+use App\Models\Especialidad;
 use App\Models\NotaTecnica;
 use App\Models\VerificacionAtinencia;
 use Atina\Docencia\Domain\Docente\GradoAcademico;
@@ -19,7 +20,24 @@ test('atestado factory crea la cadena completa docente/especialidad con el enum 
 test('un docente puede tener varios atestados con distinta especialidad o grado (D3)', function () {
     $docente = Docente::factory()->create();
 
-    Atestado::factory()->count(3)->create(['docente_id' => $docente->id]);
+    // Mismo docente, misma especialidad, grados distintos — es exactamente
+    // el caso que el UNIQUE KEY (docente_id, especialidad_id, grado) permite.
+    $especialidad = Especialidad::factory()->create();
+    Atestado::factory()->create([
+        'docente_id' => $docente->id,
+        'especialidad_id' => $especialidad->id,
+        'grado' => GradoAcademico::Licenciatura,
+    ]);
+    Atestado::factory()->create([
+        'docente_id' => $docente->id,
+        'especialidad_id' => $especialidad->id,
+        'grado' => GradoAcademico::Maestria,
+    ]);
+    Atestado::factory()->create([
+        'docente_id' => $docente->id,
+        'especialidad_id' => Especialidad::factory()->create()->id,
+        'grado' => GradoAcademico::Licenciatura,
+    ]);
 
     expect($docente->atestados()->count())->toBe(3);
 });
