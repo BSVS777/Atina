@@ -22,7 +22,12 @@ test('un docente puede tener varios atestados con distinta especialidad o grado 
 
     // Mismo docente, misma especialidad, grados distintos — es exactamente
     // el caso que el UNIQUE KEY (docente_id, especialidad_id, grado) permite.
-    $especialidad = Especialidad::factory()->create();
+    // EspecialidadFactory elige de una lista fija de 8 nombres (nombre es
+    // UNIQUE en BD); con nombre explícito nos aseguramos de que las dos
+    // especialidades de este test no choquen entre sí por azar.
+    $especialidad = Especialidad::factory()->create(['nombre' => 'Especialidad de prueba A']);
+    $otraEspecialidad = Especialidad::factory()->create(['nombre' => 'Especialidad de prueba B']);
+
     Atestado::factory()->create([
         'docente_id' => $docente->id,
         'especialidad_id' => $especialidad->id,
@@ -35,7 +40,7 @@ test('un docente puede tener varios atestados con distinta especialidad o grado 
     ]);
     Atestado::factory()->create([
         'docente_id' => $docente->id,
-        'especialidad_id' => Especialidad::factory()->create()->id,
+        'especialidad_id' => $otraEspecialidad->id,
         'grado' => GradoAcademico::Licenciatura,
     ]);
 

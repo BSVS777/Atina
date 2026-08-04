@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -58,5 +59,50 @@ class User extends Authenticatable implements PasskeyUser
         return Str::length($initials) > 1
             ? Str::substr($initials, 0, 1).Str::substr($initials, -1)
             : $initials;
+    }
+
+    /**
+     * @return BelongsToMany<Role, $this>
+     */
+    public function roles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'role_user');
+    }
+
+    /**
+     * Permisos directos/extra otorgados a este usuario, fuera de sus roles.
+     *
+     * @return BelongsToMany<Permission, $this>
+     */
+    public function permisosDirectos(): BelongsToMany
+    {
+        return $this->belongsToMany(Permission::class, 'permission_user')->withPivot('otorgado_por');
+    }
+
+    /**
+     * Unión de los permisos que llegan por rol y los otorgados directamente.
+     *
+     * @return list<string>
+     */
+    public function permisos(): array
+    {
+        $porRol = $this->roles()->with('permissions:id,name')->get()
+            ->pluck('permissions')
+            ->flatten()
+            ->pluck('name');
+
+        $directos = $this->permisosDirectos()->pluck('name');
+
+        $permisos = $porRol->merge($directos)
+            ->map(fn (mixed $nombre): string => (string) $nombre)
+            ->unique()
+            ->all();
+
+        return array_values($permisos);
+    }
+
+    public function tienePermiso(string $permiso): bool
+    {
+        return in_array($permiso, $this->permisos(), true);
     }
 }
