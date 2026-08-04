@@ -50,6 +50,21 @@ Discovery → spec → decisiones → slices → implementación → revisión �
 - Para trabajo paralelo, usar worktrees separados.
 - Detener y reportar si una migración o acción destructiva requiere decisión humana.
 
+## Commits y diario de decisiones (obligatorio)
+
+### Commits locales
+- Tras cada implementación nueva relevante (aunque sea mínima), crear un commit local en inglés siguiendo Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, etc.).
+- No hacer `git push` al remoto bajo ninguna circunstancia — el push lo controla el usuario.
+- Cambios sin valor de implementación (lectura, análisis, exploración, preguntas) no requieren commit.
+
+### Diario de decisiones IA
+- Cada decisión relevante tomada durante el desarrollo se documenta como nueva entrada en `Docs/DIARIO_DECISIONES_IA.md` (sin sobrescribir entradas previas), registrando:
+  - Qué se consultó a la IA.
+  - Qué se aceptó de su respuesta.
+  - Qué se rechazó y por qué.
+  - Qué hubo que corregir porque estaba incorrecto o incompleto.
+  - Qué se aprendió del proceso.
+
 ## Definition of Done
 - Criterios satisfechos.
 - Tests/build/lint ejecutados.
@@ -57,6 +72,8 @@ Discovery → spec → decisiones → slices → implementación → revisión �
 - Riesgos y deuda visibles.
 - Documentación actualizada.
 - Diff revisado.
+- Commit local convencional (inglés) creado por cada implementación relevante, sin push.
+- Diario de decisiones IA actualizado.
 - Rollback o recuperación contemplados cuando aplica.
 
 ## Compatibilidad con Gentle AI global
