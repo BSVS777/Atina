@@ -31,3 +31,39 @@ Registro de interacciones relevantes con IA durante el desarrollo: qué se consu
 **Aprendido:** `CLAUDE.md` y `GEMINI.md` usan `@AI_HARNESS.md` como referencia (un solo lugar para editar), pero `AGENTS.md` y `.github/copilot-instructions.md` son copias estáticas del mismo contenido sin mecanismo de sync en este repo — cualquier cambio a las reglas del harness debe replicarse manualmente en los tres archivos hasta que exista una herramienta de sincronización.
 
 ---
+
+## 2026-08-03 — Scaffold de la aplicación Laravel (TALL) y arquitectura hexagonal/DDD
+
+**Consulta:** scaffoldear la estructura base del proyecto: aplicación Laravel con el stack TALL y una organización hexagonal/DDD.
+
+**Aceptado:**
+- Motor de base de datos: MySQL 8.0 (decisión del usuario, entre MySQL y PostgreSQL — ambos ya estaban instalados y corriendo localmente).
+- Starter kit oficial `--livewire` de `laravel new` (incluye Livewire + Tailwind v4 + Alpine vía Flux), sobre PHP 8.4 sirviendo desde Laravel Herd.
+- Pest como framework de test (en vez de PHPUnit puro) específicamente porque `pestphp/pest-plugin-arch` da un gate de arquitectura nativo ("el dominio no importa Illuminate/Livewire/Flux") sin tener que escribir un analizador estático a mano — encaja con la regla de "Arquitectura Hexagonal + DDD" de `AI_HARNESS.md` §3.
+- Separación física: `src/` (namespace `Atina\`, PSR-4 propio) para Domain + Application, framework-agnóstico; `app/` (namespace `App\`, ya provisto por Laravel) para toda la Infraestructura (Eloquent, Livewire, controllers, providers). Se prefirió esto sobre anidar `Domain/Application/Infrastructure` dentro de `app/App\Domain\...` porque la separación de carpetas raíz hace el límite arquitectónico visible de un vistazo y es lo que el test de arquitectura verifica.
+- TypeScript: `AI_HARNESS.md` §3 lo exige y el starter kit Livewire no lo trae por defecto (a diferencia de los starter kits Vue/React). Se agregó `typescript` como devDependency, `tsconfig.json`, y se renombraron `resources/js/app.js`/`passkeys.js` a `.ts` (compilan y type-checean limpio con `tsc --noEmit`).
+
+**Rechazado:**
+- No se usó `laravel new .` directo sobre la raíz del repo — el instalador rechaza `--force` quan el target es el directorio actual. Se scaffoldeó en un directorio temporal y se hizo merge manual preservando `Docs/`, los archivos de harness y `.github/copilot-instructions.md`.
+- No se instaló Laravel Boost (`--no-boost`): el repo ya tiene su propio harness de IA (`AI_HARNESS.md`); agregar otra capa de tooling de IA sin evaluarla primero violaba la regla de "no introducir una dependencia sin evaluar mantenimiento y alternativa".
+- No se creó código de dominio real todavía (VOs, aggregate `Docente`, etc.) — el pedido era "estructura base"; la implementación de DO-01 queda para el siguiente slice. `src/Docencia/**/README.md` documenta qué va en cada carpeta.
+
+**Corregido:** el primer intento de `laravel new . --force` falló ("Cannot use --force option when using current directory"); el segundo intento (`laravel new .atina_scaffold_tmp`) falló porque el instalador ejecuta `composer` como subproceso y el PATH de esta sesión de shell no tenía el bin de Herd — se corrigió exportando `PATH` con `~/.config/herd/bin` antes de invocar.
+
+**Aprendido:** en Windows, Laravel Herd no expone `php`/`composer`/`laravel` como ejecutables sueltos en su carpeta `bin` — son `.bat` (`php.bat`, `composer.bat`, `laravel.bat`) más una copia real (`php84/php.exe`) y phars (`composer.phar`, `laravel.phar`). Git Bash no resuelve `.bat` vía `which`/PATHEXT automáticamente como sí lo hace `cmd.exe`, así que los comandos deben invocarse con paths explícitos o con el bin de Herd exportado al `PATH` de la sesión.
+
+---
+
+## 2026-08-03 — Schema compartido del profesor: implementación vía migraciones con SQL crudo
+
+**Consulta:** durante el merge del scaffold apareció `sistema_gestion_academica_utn.sql` en la raíz del repo, sin trackear en git y sin que yo lo hubiera creado — se le preguntó al usuario de dónde salía antes de tocarlo o de decidir el nombre de la base de datos.
+
+**Aceptado:** es el schema físico MySQL que el profesor entregó para los 5 módulos del sistema (RBAC, catálogos académicos, repositorio curricular, estudiantes, atinencias, docentes/atestados, oferta académica, reservas de aulas, solicitudes estudiantiles, gestión documental — ~35 tablas). El usuario indicó implementarlo completo y usarlo tal cual. Se extrajo, sin modificar el contenido, a `database/sql/schema_compartido.sql` (secciones 3-8; las secciones 1-2 —auth, cache, jobs, passkeys— ya las cubrían al detalle las migraciones por defecto del scaffold de Laravel, verificado comparando columna por columna) y `database/sql/seed_compartido.sql` (sección 9: roles, permisos, carreras, catálogos base), cada uno cargado por una única migración/seeder vía `DB::unprepared(File::get(...))`. El archivo original se movió a `Docs/sistema_gestion_academica_utn.sql` como referencia.
+
+**Rechazado:** no se transcribió el schema a mano a los métodos fluidos de `Schema::create()` de Laravel (35 tablas, ENUMs, CHECK constraints, FKs con distintos `ON DELETE`). El riesgo de una discrepancia de un solo tipo de columna o constraint frente al schema real —compartido por 5 equipos que dependen de la misma base de datos— pesaba más que la idiomaticidad de usar el query builder de Laravel. Cargar el `.sql` verbatim garantiza fidelidad exacta con lo que entregó el profesor.
+
+**Corregido:** los tests con `RefreshDatabase` fallaban contra sqlite in-memory (`SQLSTATE[HY000]: ... near "SET": syntax error`) porque el schema es SQL de MySQL puro (`BIGINT UNSIGNED AUTO_INCREMENT`, `ENGINE = InnoDB`, `ENUM`, `CHECK`) y no es válido en SQLite. Se cambió `phpunit.xml` para que los tests corran contra una base MySQL real y separada (`gestion_academica_utn_test`) en vez de `:memory:`, sacrificando la velocidad de sqlite in-memory a cambio de fidelidad total con el schema compartido — se consideró la corrección correcta dado que el objetivo es una base de datos física compartida entre 5 grupos, no solo velocidad de test.
+
+**Aprendido:** el schema del profesor ya resuelve o corrige varias de las ambigüedades documentadas en `Docs/DUDAS_LOGICA_NEGOCIO.md` antes de preguntarle nada (p. ej. RN-01 tiene 5 grados académicos, no 4 — faltaba "Diplomado"; el rol se llama literalmente `Coordinadora de Docencia`; sí existe un rol `Docente` que se autoconsulta, contradiciendo la asunción T4 original). Se documentó la reconciliación completa en una sección nueva (`Docs/DUDAS_LOGICA_NEGOCIO.md` §7) en vez de reescribir las asunciones originales, para conservar el registro histórico de qué se pensaba antes de tener el schema real.
+
+---

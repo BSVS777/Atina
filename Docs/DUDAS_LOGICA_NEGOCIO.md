@@ -56,3 +56,24 @@ Fuente: `Docs/Enunciado/Proyecto_3_Gestion_Docente_Atinencias.docx`. Complementa
 | D15 | Cuando finalmente se publica el catálogo de una carrera que antes no lo tenía, ¿se re-evalúan retroactivamente las asignaciones que ya fueron "Aprobadas" manualmente bajo "Sin catálogo"? | Riesgo de negocio real: una asignación aprobada a mano podría resultar "No Atinente" contra el catálogo recién publicado, y nadie se entera. | No se re-evalúan automáticamente; las decisiones manuales ya tomadas quedan firmes. Publicar el catálogo solo afecta asignaciones **nuevas** desde ese momento. |
 | D16 | Si la Coordinadora **rechaza** la asignación sin catálogo, ¿qué pasa con el grupo (queda sin docente asignado, se notifica a alguien, se dispara otro flujo)? | El enunciado no lo describe — probablemente está fuera del alcance de este módulo, pero conviene confirmarlo para no asumir de más ni construir de menos. | Fuera de alcance de este módulo: el grupo queda sin docente asignado y la gestión de esa vacante la resuelve otro módulo/proceso manual. |
 
+## 7. Resuelto por el schema compartido del profesor (2026-08-03)
+
+El profesor entregó `Docs/sistema_gestion_academica_utn.sql` (schema físico MySQL de los 5 módulos, autoritativo). Resuelve o corrige lo siguiente — las asunciones originales arriba se dejan intactas como registro histórico de lo que se pensaba antes de tener el schema real.
+
+| ID | Qué cambia | Evidencia en el schema |
+|---|---|---|
+| A1 | El rol se llama literalmente `Coordinadora de Docencia` en `roles.name` (no un slug neutro como se había asumido) | `INSERT INTO roles ... ('Coordinadora de Docencia', ...)` |
+| A3 / D1 | Confirmado: mismo vocabulario controlado compartido entre atestado y catálogo | Tabla `especialidades`, referenciada por FK desde `atestados.especialidad_id` y `catalogo_atinencia_especialidad.especialidad_id` |
+| RN-01 | Son 5 grados, no 4 — se agrega "Diplomado" | `atestados.grado ENUM('Diplomado','Bachillerato','Licenciatura','Maestría','Doctorado')` |
+| D3 | Confirmado: un docente puede tener varios atestados (difieren en especialidad y/o grado) | `UNIQUE KEY atestados_docente_especialidad_grado_unique (docente_id, especialidad_id, grado)` — permite múltiples filas, solo bloquea el duplicado exacto |
+| D2 | Consistente con la asunción (no hay soft-delete ni endpoint de baja) | `atestados` no tiene columna `deleted_at` |
+| D7 | Confirmado que se valida, pero **en capa de aplicación, no como constraint de BD** | Nota de alcance del archivo: "solapamiento de intervalos [ini, fin) ... en capa de aplicación por diseño" |
+| D11 | Confirmado: snapshot inmutable por verificación | `verificaciones_atinencia.catalogo_atinencia_id` es nullable (NULL solo si `resultado = 'Sin catálogo'`) y no se recalcula |
+| D12 | Confirmado: mismo registro de asignación, no uno paralelo | `notas_tecnicas.asignacion_docente_id` es `UNIQUE` — una nota técnica por asignación |
+| D13 | Confirmado: existe una acción de ratificación explícita | `notas_tecnicas.estado` incluye `'Ratificada'` + columna `ratificada_at` |
+| D14 | Confirmado: vencida es estado terminal | `notas_tecnicas.estado` no tiene un valor de "reapertura" |
+| T4 | **Falsificado** — si hay más roles que interactúan con la oferta/atinencias, incluyendo un rol `Docente` que sí se autoconsulta | `roles`: Administrador, Coordinadora de Docencia, Docente, Consulta, Director de Carrera, Coordinador CONTA, Recursos Humanos, Estudiante, Comisión Técnica |
+| T1 | Matizado — no es "cualquier autenticado": el permiso `oferta.consultar` se otorga explícitamente a la mayoría de roles (Admin, Coordinadora, Docente, Consulta, Director de Carrera, Coordinador CONTA, RRHH) pero no a Estudiante ni Comisión Técnica | `permission_role` (permiso id 6 = `oferta.consultar`) |
+| D9 | Sin resolver del todo — el modelo de datos es consistente con "nivel + especialidad" (ambos son parte de la clave de `atestados`), pero el schema no impone la lógica de comparación de DO-02a; sigue siendo decisión de dominio | — |
+| D5, D6, D4/A4 | Sin cambios — el schema guarda los datos (`vigencia_inicio`/`vigencia_fin`, tabla `auditorias`) pero no dicta la regla de negocio; sigue siendo decisión a tomar en DO-02a / DO-01-F2 | — |
+

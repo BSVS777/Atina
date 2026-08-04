@@ -3,6 +3,8 @@
 Fuente: `Docs/Enunciado/Proyecto_3_Gestion_Docente_Atinencias.docx` (SRS adaptado FR-DO-01/02/02a/02b/02d).
 Alcance de este documento: foco en **DO-01**, con trazabilidad de sus dependencias hacia DO-02/DO-02a (requeridas por la rúbrica de "completitud del módulo").
 
+Schema físico compartido por los 5 módulos del sistema (entregado por el profesor, autoritativo): `Docs/sistema_gestion_academica_utn.sql`. Resuelve varias de las ambiguedades de `Docs/DUDAS_LOGICA_NEGOCIO.md` — ver su §8.
+
 ## 1. Requisitos funcionales
 
 | ID | Requerimiento | Criterio de aceptación | Archivos/componentes (propuesto) | Test | Evidencia | Estado |
@@ -20,7 +22,7 @@ Alcance de este documento: foco en **DO-01**, con trazabilidad de sus dependenci
 
 | Regla | Detalle | Dónde se aplica |
 |---|---|---|
-| RN-01 | Grados válidos: bachillerato, licenciatura, maestría, doctorado (enumeración cerrada) | VO `GradoAcademico` |
+| RN-01 | Grados válidos: **diplomado**, bachillerato, licenciatura, maestría, doctorado (enumeración cerrada — corregido: el schema del profesor (`atestados.grado`) tiene 5 valores, no 4; el enunciado original omitía "Diplomado") | VO `GradoAcademico` |
 | RN-02 | Área de especialización es obligatoria y debe ser comparable con el vocabulario del catálogo (DO-02) | VO `AreaEspecializacion` — **decisión de diseño compartida con DO-02**, ver §6 |
 | RN-03 | Año de obtención no puede ser futuro ni implausible | VO `AñoObtencion` (validación de rango) |
 | RN-04 | Solo Administrador o Coordinadora de Docencia modifican atestados | Política de autorización de dominio, no en el borde HTTP |
