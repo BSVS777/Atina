@@ -78,3 +78,109 @@ filesystem, and the schema/RBAC compatibility conflict wasn't visible until
 after reading Atina's actual migrations, models and journal — worth doing a
 full read of both codebases' real state before trusting a prompt's stated
 assumptions, especially for a task with this much blast radius.
+
+---
+
+## 2026-08-10 — Porting Atina's Docencia module into SIGA's Academic context
+
+### AI consultation
+
+Implementation of the module scoped in the kickoff entry: teachers,
+academic credentials ("atestados"), specialties and positions, following
+`Docs/Guia-CRUD-SIGA-UTN.md`'s worked example (which literally uses
+`Docente`/Teacher as its sample entity under an `Academic` context).
+
+### Accepted
+
+- Bounded context `Academic`, with `Teacher` and `AcademicCredential` as
+  independent sibling entities (not one nested inside the other) — they're
+  each their own aggregate with their own lifecycle, matching how
+  `IdentityAccess` already groups `Role`/`Permission` as siblings rather
+  than one containing the other.
+- English names for the ported vocabulary: `Docente`→`Teacher`,
+  `Atestado`→`AcademicCredential`, `Especialidad`→`Specialty`,
+  `Puesto`→`Position`, `Auditoria`→`AuditLog`, `GradoAcademico`→
+  `DegreeLevel` (values: diploma/bachelor/licentiate/master/doctorate —
+  the Costa Rican degree ladder in English), `AnioObtencion`→`YearObtained`.
+- `AuditLog` placed under `src/Shared/Audit`, not inside `Academic` —
+  it's a cross-cutting concern (any future module could audit through it),
+  matching how `Shared/Export` already holds the PDF/Excel exporters.
+- `Teacher` has no Domain/Application layer, only a Presentation-layer
+  Livewire component reading `App\Models\Teacher` directly — Atina never
+  built one either (docente is explicitly a read-only external reference
+  in its own design, "T3"), so this preserves that scope decision instead
+  of inventing DDD ceremony around a module with no real business logic.
+  `AcademicCredential` gets the full four-layer treatment since it has
+  actual invariants (year range, duplicate detection) and use cases
+  (register/edit with audit).
+- `AcademicCredential`'s domain entity references `specialtyId` as a plain
+  int, not Atina's nested `Especialidad` value object — Atina's own
+  requirements doc justified that VO as a forward-looking contract for a
+  catalog-comparison feature (DO-02) this integration explicitly excludes;
+  without that consumer, the wrapper added indirection with no invariant
+  behind it. Revisit if/when that catalog feature is ever ported.
+- Authorization enforced only through `AcademicCredentialPolicy`
+  (`academic_credentials.create` / `.edit`) at the Presentation boundary —
+  dropped Atina's separate `PoliticaAutorizacionAtestado` domain-level
+  indirection and its use-case-level re-check of the actor's permission
+  list, to match SIGA's own established convention (Role/Permission use
+  cases don't re-check authorization either; Policy classes are the single
+  point of enforcement).
+- No delete capability for `AcademicCredential` — the source requirement
+  (DO-01) explicitly scoped this to create/edit only ("alta/edición, sin
+  baja"); the Policy has no `delete` method and the UI has no delete
+  action, rather than adding one nobody asked for.
+- `academic_credentials.*` permissions added to `PermissionSeeder::MODULES`
+  using SIGA's existing 7-action convention (create/view/edit/delete/
+  search/export_pdf/export_excel), replacing Atina's single coarse
+  `atestados.gestionar` permission — matches every other module in SIGA's
+  RBAC, even though `view`/`delete`/`export_*` aren't wired to anything
+  yet (view is implicitly open to any authenticated user, matching Atina's
+  own design; delete and export were never built).
+- Reused SIGA's existing `x-ui.data-table`/`x-ui.modal`/`x-ui.row-actions`
+  Blade components instead of Atina's Flux-table Volt views, so the
+  ported screens look native instead of introducing a second design
+  system. The teacher's credentials sub-list intentionally does **not**
+  use `x-ui.data-table` (which brings search/pagination controls that
+  don't make sense for "one teacher's handful of credentials") — a
+  smaller hand-built table reusing the same CSS classes instead.
+- Wired the sidebar's existing "Teachers" nav item (previously a
+  JS-only placeholder with no href) to the real route, following the
+  exact pattern already used for Roles/Permissions above it.
+
+### Rejected
+
+- Did not port the ~30 unimplemented tables (classrooms, enrollment,
+  course offerings, student requests, document management) from the
+  professor's shared schema — see kickoff entry's schema-scope decision.
+- Did not give `Teacher` create/edit/delete UI — Atina's own design
+  treats it as an external reference; adding CRUD SIGA never asked for
+  would go beyond what was actually validated.
+- Did not add a "view" permission gate on the teacher list/profile pages —
+  matches Atina's original `Route::middleware(['auth'])`-only access; only
+  the credential mutation actions are permission-gated.
+
+### Corrections
+
+- PHPStan caught 4 real type errors during verification, all fixed:
+  `orderBy()`'s direction parameter needs a literal `'asc'|'desc'`, not a
+  plain `string` (`$this->sortDir`); a nullsafe `->position?->name` access
+  on a relationship that's actually never null (the FK is `NOT NULL`);
+  and `auth()->id()` returning `int|string|null` where the DTO expects
+  `int|null` (switched to `auth()->user()?->id`, typed `int` on the model).
+- The first version of the login-required-permission test for `Teacher`
+  assumed a `hasPermissionTo` gate needed to exist; confirmed by reading
+  Atina's actual route file that teacher access is `auth`-only, so no
+  such gate was built (see Rejected above).
+
+### Learning
+
+Running `phpstan`/`pint` scoped to only the files this slice touched (not
+the whole repo) was necessary — the pre-existing SIGA baseline already has
+unrelated Pint style violations across files this integration never
+touched, and running `pint --test` repo-wide would have produced a
+misleading "failing" result. The pre-existing
+`AuthenticationTest::test_login_screen_can_be_rendered` failure (302
+instead of 200) reproduces in isolation on an untouched file and is
+unrelated to this work — flagged for the user rather than fixed
+out-of-scope.
