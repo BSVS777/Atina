@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Src\Academic\AcademicCredential\Infrastructure\Persistence\Repositories;
 
 use App\Models\AcademicCredential as AcademicCredentialModel;
+use Illuminate\Database\Eloquent\Collection;
 use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
@@ -21,7 +22,7 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
 
     public function forTeacher(int $teacherId): array
     {
-        /** @var \Illuminate\Database\Eloquent\Collection<int, AcademicCredentialModel> $models */
+        /** @var Collection<int, AcademicCredentialModel> $models */
         $models = AcademicCredentialModel::query()
             ->where('teacher_id', $teacherId)
             ->orderBy('year_obtained', 'desc')
@@ -48,7 +49,7 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
     {
         $model = $credential->id() !== null
             ? AcademicCredentialModel::query()->findOrFail($credential->id())
-            : new AcademicCredentialModel();
+            : new AcademicCredentialModel;
 
         $model->fill([
             'teacher_id' => $credential->teacherId(),

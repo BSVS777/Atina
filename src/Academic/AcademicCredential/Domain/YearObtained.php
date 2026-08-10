@@ -21,7 +21,7 @@ final class YearObtained
 
         if ($value < self::EARLIEST_PLAUSIBLE_YEAR || $value > $currentYear) {
             throw new InvalidArgumentException(
-                "Year obtained ({$value}) must be between " . self::EARLIEST_PLAUSIBLE_YEAR . " and {$currentYear}."
+                "Year obtained ({$value}) must be between ".self::EARLIEST_PLAUSIBLE_YEAR." and {$currentYear}."
             );
         }
 

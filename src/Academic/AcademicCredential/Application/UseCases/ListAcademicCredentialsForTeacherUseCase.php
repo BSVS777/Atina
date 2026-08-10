@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Src\Academic\AcademicCredential\Application\UseCases;
 
 use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface;
+use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 
 final class ListAcademicCredentialsForTeacherUseCase
 {
@@ -13,7 +14,7 @@ final class ListAcademicCredentialsForTeacherUseCase
     ) {}
 
     /**
-     * @return array<int, \Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential>
+     * @return array<int, AcademicCredential>
      */
     public function handle(int $teacherId): array
     {

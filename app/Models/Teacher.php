@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\TeacherFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $estimated_workload
  * @property bool $active
  * @property-read Position $position
- * @property-read \Illuminate\Database\Eloquent\Collection<int, AcademicCredential> $academicCredentials
+ * @property-read Collection<int, AcademicCredential> $academicCredentials
  */
 #[Fillable(['user_id', 'position_id', 'national_id', 'first_name', 'last_name', 'second_last_name', 'estimated_workload', 'active'])]
 class Teacher extends Model
