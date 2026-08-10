@@ -184,3 +184,151 @@ misleading "failing" result. The pre-existing
 instead of 200) reproduces in isolation on an untouched file and is
 unrelated to this work — flagged for the user rather than fixed
 out-of-scope.
+
+---
+
+## 2026-08-10 — Stabilization pass: branch isolation, architecture review, login test fix
+
+### AI consultation
+
+The user asked for a stabilization/isolation pass before continuing further
+Atina integration: (1) verify all migration work happens on a dedicated
+branch instead of `main`, (2) audit remote-push safety, (3) review whether
+`src/Academic` and `src/Shared/Audit`'s Domain/Application layering is
+proportional or was inherited mechanically from Atina, (4) find the root
+cause of the `AuthenticationTest::test_login_screen_can_be_rendered`
+failure flagged in the previous entry and fix the correct side, (5)
+re-verify the Docencia/Academic slice still respects the six previously
+established decisions, and (6) run the full verification suite. No new
+business functionality was in scope.
+
+### Accepted
+
+- **Branch isolation was already in place.** `integration/atina-foundation`
+  already existed, branched from `main`@`c112f53` ("chore: commit SIGA
+  starter kit baseline"), and every Atina-integration commit
+  (`b4e3491`..`5622582`) was already on it — `main` has never been touched
+  by this work. No new branch was created; this pass only re-confirmed the
+  isolation and documents it here as requested.
+- **Login test was wrong, not the app.** `GET /login` returns 302 by
+  design: `FortifyServiceProvider::configureViews()` sends
+  `Fortify::loginView()` to `redirect()->route('home')` with an explicit
+  comment explaining the login UI lives on the welcome page, not a separate
+  `/login` screen. Both that provider and the failing test are untouched
+  since the starter-kit baseline commit (`c112f53`) — this predates the
+  Atina integration entirely. Root cause: a scaffold-default Fortify test
+  that was never updated to match the app's actual auth UX. Fixed by
+  rewriting the test to assert the real contract
+  (`assertRedirect(route('home'))` instead of `assertOk()`), renamed to
+  `test_login_screen_redirects_to_home`. `POST /login` (the real
+  credential-submission path) was untouched and already passes.
+- **Architecture review: everything reviewed is KEEP, all proportional and
+  consistent with SIGA's pre-existing pattern**, not mechanically inherited
+  from Atina:
+  - `YearObtained` VO — KEEP. Enforces a real invariant (year between 1950
+    and current year) reused identically by both create and edit.
+  - `DegreeLevel` enum — KEEP. Mirrors a DB column with a fixed, meaningful
+    value set.
+  - `AcademicCredential` entity — KEEP. Validates a real invariant
+    (non-blank institution) and stays immutable.
+  - `AcademicCredentialRepositoryInterface` + `EloquentAcademicCredentialRepository`
+    — KEEP. Same convention as the pre-existing `Role`/`Permission`
+    repositories; not Atina-specific.
+  - `RegisterAcademicCredentialUseCase` / `EditAcademicCredentialUseCase` —
+    KEEP. Real business logic: duplicate-credential detection
+    (teacher+specialty+degree), and edit only audits when a field actually
+    changed — this is exactly the kind of business rule the harness says
+    justifies a use-case layer.
+  - `FindAcademicCredentialUseCase` / `ListAcademicCredentialsForTeacherUseCase`
+    — KEEP, on consistency grounds. Each is a trivial one-line pass-through
+    to the repository, which in isolation looks like unnecessary ceremony —
+    but `IdentityAccess\Role` and `IdentityAccess\Permission` already have
+    the identical `Find*`/`List*` use-case shape predating Academic, so
+    diverging here would be the inconsistent choice, not the proportional
+    one.
+  - `AcademicCredentialDTO` — KEEP, same precedent (`RoleDTO`,
+    `PermissionDTO` predate Academic).
+  - `AcademicCredentialPolicy` — KEEP. Registered through the same
+    `DomainServiceProvider::$domainPolicies` mechanism as `RolePolicy`/
+    `PermissionPolicy`; correctly has no `delete` method (by design, per
+    the earlier decision journal entry).
+  - `DomainServiceProvider` — KEEP as-is (only cleaned up its style, see
+    Corrections). It's the single existing SIGA-wide binding/policy/route
+    provider used by `IdentityAccess` before Academic existed; Academic
+    just added its own entries to the same arrays.
+  - `Shared\Audit` (`AuditLogRepositoryInterface`, `AuditLogEntry`,
+    `EloquentAuditLogRepository`) — KEEP. This one is new in this
+    integration (not pre-existing), so it got the closest scrutiny: a
+    single-consumer interface would normally be a smell, but
+    `InMemoryAuditLogRepository` fakes it in
+    `RegisterAcademicCredentialUseCaseTest` /
+    `EditAcademicCredentialUseCaseTest` to unit-test the audit-on-change
+    business rule without touching the database — real testability value,
+    not cosmetic abstraction. The polymorphic `auditable_type`/`auditable_id`
+    shape also anticipates the audit trail's only realistic future: more
+    academic modules (grades, enrollment) needing the same trail.
+  - `Shared\Export` (`ExcelExporterInterface`/`PdfExporterInterface`) was
+    out of this review's scope — confirmed via `git log` it already existed
+    in the `c112f53` starter-kit baseline, predating any Atina work.
+- **Docencia/Academic slice re-verified** against all six previously
+  established decisions (scoped tables only, shared schema as future
+  reference, SIGA RBAC as sole authorization mechanism, English internals,
+  `lang/es.json`-routed UI strings, SIGA visual conventions) — all still
+  hold; no drift found.
+- Fixed a scoped `Pint`/`PHPStan` run's findings (mechanical, no behavior
+  change): import ordering, an unused `WithoutModelEvents` import in
+  `PermissionSeeder`, fully-qualified class-string references replaced
+  with imports in `DomainServiceProvider`, and a tautological
+  `assertNotNull($log->created_at)` in `AcademicCredentialAuditTest`
+  removed (Eloquent guarantees `created_at` is set on a freshly persisted
+  record; PHPStan flagged it as always-true).
+
+### Rejected
+
+- Nothing relevant. No architecture element reviewed was classified REMOVE
+  or SIMPLIFY — every abstraction present has a concrete, verifiable reason
+  (an enforced invariant, a real business rule, an existing SIGA
+  precedent, or a testability need), so nothing was removed.
+
+### Why it was rejected
+
+Not applicable — see Rejected above.
+
+### Corrections
+
+- `DomainServiceProvider`'s `$domainBindings`/`$domainPolicies` arrays used
+  fully-qualified `\Foo\Bar\Baz::class` references inline instead of
+  imported short names, and had a stray blank line splitting a docblock
+  from the method it documents; both are pre-existing style issues from
+  when Academic's entries were added, caught by `pint --test` scoped to
+  branch-changed files and fixed with `pint`'s auto-fixer, then re-verified
+  with a second scoped `pint --test` + `phpstan analyse` pass.
+
+### Learning
+
+- The remote `origin` (`https://github.com/BSVS777/Atina.git`) points to
+  an entirely different, unrelated-history repository (`git ls-remote`
+  shows `origin/main` at `e694cd4e`, sharing no ancestry with this
+  repository's `main` at `c112f53`). This is almost certainly a leftover
+  from how the checkout was created, not an intentional SIGA remote.
+  Pushing either `main` or `integration/atina-foundation` to `origin` as
+  configured would push SIGA's history into the Atina reference repo (or
+  fail/diverge, depending on how GitHub is configured) — flagged for the
+  user rather than changed, since remote configuration is explicitly a
+  user decision.
+- `migrate:fresh --seed` was verified against a disposable copy of the
+  local `database/database.sqlite` (copied to the OS temp scratch
+  directory, migrated/seeded there, then deleted) rather than against the
+  real local dev database, since the harness requires *positively*
+  verifying disposability first and copying sidesteps the question
+  entirely — migrations, `PermissionSeeder`, `RoleSeeder`, and
+  `AcademicManagementDemoSeeder` all completed cleanly.
+- The Claude-in-Chrome browser extension was not connected in this
+  environment, so the planned real-browser walkthrough of the Teacher
+  list/profile pages could not run. Used the strongest available
+  alternative instead: HTTP-level checks against a temporary
+  `php artisan serve` instance confirming `GET /login` → 302 → `/`, and
+  `GET /academic/teachers` (unauthenticated) → 302 → `/login`, combined
+  with the existing Livewire-level feature tests
+  (`TeacherIndexTest`, `TeacherProfileComponentTest`) that already exercise
+  authenticated rendering and the credential CRUD modal end-to-end.
