@@ -23,6 +23,10 @@ final class DomainServiceProvider extends ServiceProvider
         => \Src\Shared\Export\Infrastructure\SpatieExcelExporter::class,
         \Src\Shared\Export\Contracts\PdfExporterInterface::class
         => \Src\Shared\Export\Infrastructure\SpatiePdfExporter::class,
+        \Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface::class
+        => \Src\Academic\AcademicCredential\Infrastructure\Persistence\Repositories\EloquentAcademicCredentialRepository::class,
+        \Src\Shared\Audit\Domain\Contracts\AuditLogRepositoryInterface::class
+        => \Src\Shared\Audit\Infrastructure\Persistence\Repositories\EloquentAuditLogRepository::class,
     ];
 
     /**
@@ -33,6 +37,8 @@ final class DomainServiceProvider extends ServiceProvider
         => \Src\IdentityAccess\Role\Presentation\Policies\RolePolicy::class,
         \Src\IdentityAccess\Permission\Domain\Entities\Permission::class
         => \Src\IdentityAccess\Permission\Presentation\Policies\PermissionPolicy::class,
+        \Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential::class
+        => \Src\Academic\AcademicCredential\Presentation\Policies\AcademicCredentialPolicy::class,
     ];
 
     public function register(): void
