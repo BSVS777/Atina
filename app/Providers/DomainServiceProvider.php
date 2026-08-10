@@ -4,10 +4,28 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Contracts\Auth\Authenticatable;
+use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface;
+use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
+use Src\Academic\AcademicCredential\Infrastructure\Persistence\Repositories\EloquentAcademicCredentialRepository;
+use Src\Academic\AcademicCredential\Presentation\Policies\AcademicCredentialPolicy;
+use Src\IdentityAccess\Permission\Domain\Contracts\PermissionRepositoryInterface;
+use Src\IdentityAccess\Permission\Domain\Entities\Permission;
+use Src\IdentityAccess\Permission\Infrastructure\Persistence\Repositories\EloquentPermissionRepository;
+use Src\IdentityAccess\Permission\Presentation\Policies\PermissionPolicy;
+use Src\IdentityAccess\Role\Domain\Contracts\RoleRepositoryInterface;
+use Src\IdentityAccess\Role\Domain\Entities\Role;
+use Src\IdentityAccess\Role\Infrastructure\Persistence\Repositories\EloquentRoleRepository;
+use Src\IdentityAccess\Role\Presentation\Policies\RolePolicy;
+use Src\Shared\Audit\Domain\Contracts\AuditLogRepositoryInterface;
+use Src\Shared\Audit\Infrastructure\Persistence\Repositories\EloquentAuditLogRepository;
+use Src\Shared\Export\Contracts\ExcelExporterInterface;
+use Src\Shared\Export\Contracts\PdfExporterInterface;
+use Src\Shared\Export\Infrastructure\SpatieExcelExporter;
+use Src\Shared\Export\Infrastructure\SpatiePdfExporter;
 
 final class DomainServiceProvider extends ServiceProvider
 {
@@ -15,30 +33,21 @@ final class DomainServiceProvider extends ServiceProvider
      * @var array<class-string, class-string>
      */
     private array $domainBindings = [
-        \Src\IdentityAccess\Role\Domain\Contracts\RoleRepositoryInterface::class
-        => \Src\IdentityAccess\Role\Infrastructure\Persistence\Repositories\EloquentRoleRepository::class,
-        \Src\IdentityAccess\Permission\Domain\Contracts\PermissionRepositoryInterface::class
-        => \Src\IdentityAccess\Permission\Infrastructure\Persistence\Repositories\EloquentPermissionRepository::class,
-        \Src\Shared\Export\Contracts\ExcelExporterInterface::class
-        => \Src\Shared\Export\Infrastructure\SpatieExcelExporter::class,
-        \Src\Shared\Export\Contracts\PdfExporterInterface::class
-        => \Src\Shared\Export\Infrastructure\SpatiePdfExporter::class,
-        \Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface::class
-        => \Src\Academic\AcademicCredential\Infrastructure\Persistence\Repositories\EloquentAcademicCredentialRepository::class,
-        \Src\Shared\Audit\Domain\Contracts\AuditLogRepositoryInterface::class
-        => \Src\Shared\Audit\Infrastructure\Persistence\Repositories\EloquentAuditLogRepository::class,
+        RoleRepositoryInterface::class => EloquentRoleRepository::class,
+        PermissionRepositoryInterface::class => EloquentPermissionRepository::class,
+        ExcelExporterInterface::class => SpatieExcelExporter::class,
+        PdfExporterInterface::class => SpatiePdfExporter::class,
+        AcademicCredentialRepositoryInterface::class => EloquentAcademicCredentialRepository::class,
+        AuditLogRepositoryInterface::class => EloquentAuditLogRepository::class,
     ];
 
     /**
      * @var array<class-string, class-string>
      */
     private array $domainPolicies = [
-        \Src\IdentityAccess\Role\Domain\Entities\Role::class
-        => \Src\IdentityAccess\Role\Presentation\Policies\RolePolicy::class,
-        \Src\IdentityAccess\Permission\Domain\Entities\Permission::class
-        => \Src\IdentityAccess\Permission\Presentation\Policies\PermissionPolicy::class,
-        \Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential::class
-        => \Src\Academic\AcademicCredential\Presentation\Policies\AcademicCredentialPolicy::class,
+        Role::class => RolePolicy::class,
+        Permission::class => PermissionPolicy::class,
+        AcademicCredential::class => AcademicCredentialPolicy::class,
     ];
 
     public function register(): void
@@ -68,7 +77,6 @@ final class DomainServiceProvider extends ServiceProvider
      * safety net that also covers permissions introduced after the last
      * seed run, without needing to re-sync anything.
      */
-
     private function registerSuperAdminBypass(): void
     {
         Gate::before(function (Authenticatable $user): ?bool {

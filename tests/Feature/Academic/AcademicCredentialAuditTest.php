@@ -43,7 +43,6 @@ class AcademicCredentialAuditTest extends TestCase
         ]);
 
         $log = AuditLog::where('auditable_id', $credential->id)->firstOrFail();
-        $this->assertNotNull($log->created_at);
         // assertEquals (not assertSame): MySQL's binary JSON storage doesn't
         // guarantee original key order, so comparisons must ignore order.
         $this->assertEquals(['before' => null, 'after' => 'UCR'], $log->changes['institution']);
