@@ -29,7 +29,7 @@ class PermissionSeeder extends Seeder
      *
      * @var array<int, string>
      */
-    private const MODULES = ['roles', 'permissions'];
+    private const MODULES = ['roles', 'permissions', 'academic_credentials'];
 
     public function run(): void
     {
