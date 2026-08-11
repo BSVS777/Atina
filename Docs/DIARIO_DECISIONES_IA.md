@@ -332,3 +332,74 @@ Not applicable — see Rejected above.
   with the existing Livewire-level feature tests
   (`TeacherIndexTest`, `TeacherProfileComponentTest`) that already exercise
   authenticated rendering and the credential CRUD modal end-to-end.
+
+---
+
+## 2026-08-10 — Correction: `origin` is the intentional canonical repository
+
+### AI consultation
+
+The previous journal entry above (Learning section) flagged `origin`
+(`https://github.com/BSVS777/Atina.git`) as an apparently unintentional,
+unrelated-history remote and recommended not touching it without user
+input. The user then explicitly clarified that this interpretation was
+wrong: `BSVS777/Atina` is intentionally the canonical GitHub repository for
+this project going forward, and the unrelated-history situation is expected
+because SIGA was deliberately introduced as the new project foundation on
+top of it. The user asked to reconcile the two histories (Atina's
+`origin/main` and the current SIGA-based `integration/atina-foundation`
+tree) without discarding either, and without pushing anything.
+
+### Accepted
+
+- **Kept `origin` unchanged**, pointing at `BSVS777/Atina.git`, per the
+  user's explicit correction. No remote reconfiguration performed.
+- **Connected the two histories with an `ours`-strategy merge**, run from
+  `integration/atina-foundation`:
+  `git merge origin/main --allow-unrelated-histories -s ours -m "chore: preserve Atina history during SIGA migration"`.
+  This makes `origin/main` an ancestor of `integration/atina-foundation`
+  (verified via `git merge-base --is-ancestor origin/main
+  integration/atina-foundation`, exit code 0) while keeping the current
+  SIGA-integrated working tree byte-for-byte unchanged (`git diff
+  HEAD^1..HEAD` was empty after the merge). Both Atina's original commit
+  history and the SIGA/Academic integration history remain fully walkable
+  in `git log --graph --all`, satisfying "preserve provenance of both
+  projects, don't squash or discard either."
+- **Renamed the old local `main` (SIGA starter-kit baseline, commit
+  `c112f53`) to `siga-baseline`** rather than deleting it, since it is
+  historically meaningful (the professor-provided starting point) but no
+  longer represents "the main branch" once `origin/main` exists locally.
+- **Recreated local `main` to point at and track `origin/main`**
+  (`git branch main origin/main` + `--set-upstream-to`), so `main` now
+  correctly means "the accepted canonical Atina/SIGA state on GitHub,"
+  matching normal Git conventions, without switching away from
+  `integration/atina-foundation` (the active branch and worktree state).
+- **No push performed.** Per explicit instruction, the eventual
+  `git push -u origin integration/atina-foundation` and follow-up PR into
+  `main` are left for the user to trigger when ready.
+
+### Rejected
+
+- Rewriting/deleting the old local `main` outright — rejected because it
+  represents real provenance (the SIGA baseline) rather than disposable
+  state; renaming to `siga-baseline` preserves it losslessly.
+- A regular (non-`ours`) merge of `origin/main` — rejected because it would
+  attempt to reconcile two unrelated full application trees file-by-file,
+  which is neither meaningful nor desired; the goal was ancestry linkage,
+  not content reconciliation.
+
+### Learning
+
+- An AI's inference from remote metadata alone ("this remote's history is
+  unrelated, therefore it's probably misconfigured") can be a reasonable
+  hypothesis to flag but is not authoritative — the human running a
+  multi-project migration may have full intent behind an unrelated-history
+  remote that isn't visible from `git log` alone. The correct behavior
+  (previously followed here too) was to surface the observation rather than
+  act on it unilaterally, which made this correction a one-step fix instead
+  of an unwind.
+- `-s ours` combined with `--allow-unrelated-histories` is the right tool
+  specifically for "make repository B an ancestor of repository A without
+  changing A's tree" — worth remembering as the standard pattern for
+  reconciling a rebrand/refoundation scenario where two previously separate
+  projects need connected history without a real file-level merge.
