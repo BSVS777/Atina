@@ -18,14 +18,14 @@ class AcademicCredentialFactory extends Factory
     public function definition(): array
     {
         return [
-            'teacher_id' => Teacher::factory(),
-            'specialty_id' => Specialty::query()->inRandomOrder()->value('id') ?? Specialty::factory(),
-            'degree_level' => fake()->randomElement(DegreeLevel::cases()),
-            'institution' => fake()->randomElement([
+            'docente_id' => Teacher::factory(),
+            'especialidad_id' => Specialty::query()->inRandomOrder()->value('id') ?? Specialty::factory(),
+            'grado' => fake()->randomElement(DegreeLevel::cases()),
+            'institucion' => fake()->randomElement([
                 'National Technical University', 'University of Costa Rica',
                 'Costa Rica Institute of Technology', 'National University',
             ]),
-            'year_obtained' => fake()->numberBetween(1995, 2024),
+            'anio_obtencion' => fake()->numberBetween(1995, 2024),
         ];
     }
 }

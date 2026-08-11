@@ -63,7 +63,8 @@ class TeacherComponent extends Component
      */
     private function query(): Builder
     {
-        $column = in_array($this->sortKey, ['national_id', 'last_name'], true) ? $this->sortKey : 'last_name';
+        $columns = ['national_id' => 'cedula', 'last_name' => 'primer_apellido'];
+        $column = $columns[$this->sortKey] ?? $columns['last_name'];
         $direction = $this->sortDir === 'desc' ? 'desc' : 'asc';
 
         return Teacher::query()
@@ -72,10 +73,10 @@ class TeacherComponent extends Component
             ->when($this->search !== '', function ($query) {
                 $term = "%{$this->search}%";
                 $query->where(function ($query) use ($term) {
-                    $query->where('first_name', 'like', $term)
-                        ->orWhere('last_name', 'like', $term)
-                        ->orWhere('second_last_name', 'like', $term)
-                        ->orWhere('national_id', 'like', $term);
+                    $query->where('nombre', 'like', $term)
+                        ->orWhere('primer_apellido', 'like', $term)
+                        ->orWhere('segundo_apellido', 'like', $term)
+                        ->orWhere('cedula', 'like', $term);
                 });
             })
             ->orderBy($column, $direction);

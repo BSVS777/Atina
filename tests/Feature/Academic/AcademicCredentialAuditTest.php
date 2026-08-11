@@ -33,19 +33,19 @@ class AcademicCredentialAuditTest extends TestCase
             ->call('save')
             ->assertHasNoErrors();
 
-        $credential = AcademicCredential::where('teacher_id', $teacher->id)->firstOrFail();
+        $credential = AcademicCredential::where('docente_id', $teacher->id)->firstOrFail();
 
-        $this->assertDatabaseHas('audit_logs', [
+        $this->assertDatabaseHas('auditorias', [
             'user_id' => $user->id,
             'auditable_type' => AcademicCredential::class,
             'auditable_id' => $credential->id,
-            'action' => 'created',
+            'accion' => 'Creación',
         ]);
 
         $log = AuditLog::where('auditable_id', $credential->id)->firstOrFail();
         // assertEquals (not assertSame): MySQL's binary JSON storage doesn't
         // guarantee original key order, so comparisons must ignore order.
-        $this->assertEquals(['before' => null, 'after' => 'UCR'], $log->changes['institution']);
+        $this->assertEquals(['before' => null, 'after' => 'UCR'], $log->cambios['institution']);
     }
 
     public function test_editing_only_audits_the_fields_that_changed(): void
@@ -54,10 +54,10 @@ class AcademicCredentialAuditTest extends TestCase
         $teacher = Teacher::factory()->create();
         $specialty = Specialty::factory()->create();
         $credential = AcademicCredential::factory()->create([
-            'teacher_id' => $teacher->id,
-            'specialty_id' => $specialty->id,
-            'institution' => 'UTN',
-            'year_obtained' => 2015,
+            'docente_id' => $teacher->id,
+            'especialidad_id' => $specialty->id,
+            'institucion' => 'UTN',
+            'anio_obtencion' => 2015,
         ]);
         $this->actingAs($user);
 
@@ -68,12 +68,12 @@ class AcademicCredentialAuditTest extends TestCase
             ->assertHasNoErrors();
 
         $editEntry = AuditLog::where('auditable_id', $credential->id)
-            ->where('action', 'updated')
+            ->where('accion', 'Modificación')
             ->firstOrFail();
 
         $this->assertEquals([
             'institution' => ['before' => 'UTN', 'after' => 'UNA'],
-        ], $editEntry->changes);
+        ], $editEntry->cambios);
     }
 
     public function test_a_rejected_attempt_does_not_create_an_audit_entry(): void
@@ -91,20 +91,18 @@ class AcademicCredentialAuditTest extends TestCase
             ->call('save')
             ->assertForbidden();
 
-        $this->assertDatabaseCount('audit_logs', 0);
+        $this->assertDatabaseCount('auditorias', 0);
     }
 
     private function userWithAcademicCredentialPermissions(): User
     {
         $user = User::factory()->create();
 
-        foreach (['create', 'edit'] as $action) {
-            $permission = Permission::query()->firstOrCreate(
-                ['name' => "academic_credentials.{$action}"],
-                ['module' => 'academic_credentials', 'action' => $action],
-            );
-            $user->givePermissionTo($permission->name);
-        }
+        $permission = Permission::query()->firstOrCreate(
+            ['name' => 'atestados.gestionar'],
+            ['module' => 'atestados', 'action' => 'gestionar'],
+        );
+        $user->givePermissionTo($permission->name);
 
         return $user;
     }

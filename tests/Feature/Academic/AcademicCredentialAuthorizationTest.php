@@ -43,7 +43,7 @@ class AcademicCredentialAuthorizationTest extends TestCase
             ->call('save')
             ->assertForbidden();
 
-        $this->assertDatabaseCount('academic_credentials', 0);
+        $this->assertDatabaseCount('atestados', 0);
     }
 
     public function test_a_user_with_permission_can_create_a_credential(): void
@@ -61,10 +61,10 @@ class AcademicCredentialAuthorizationTest extends TestCase
             ->call('save')
             ->assertHasNoErrors();
 
-        $this->assertDatabaseHas('academic_credentials', [
-            'teacher_id' => $teacher->id,
-            'specialty_id' => $specialty->id,
-            'institution' => 'UTN',
+        $this->assertDatabaseHas('atestados', [
+            'docente_id' => $teacher->id,
+            'especialidad_id' => $specialty->id,
+            'institucion' => 'UTN',
         ]);
     }
 
@@ -72,7 +72,7 @@ class AcademicCredentialAuthorizationTest extends TestCase
     {
         $user = User::factory()->create();
         $teacher = Teacher::factory()->create();
-        $credential = AcademicCredential::factory()->create(['teacher_id' => $teacher->id]);
+        $credential = AcademicCredential::factory()->create(['docente_id' => $teacher->id]);
         $this->actingAs($user);
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
@@ -84,13 +84,11 @@ class AcademicCredentialAuthorizationTest extends TestCase
     {
         $user = User::factory()->create();
 
-        foreach (['create', 'edit'] as $action) {
-            $permission = Permission::query()->firstOrCreate(
-                ['name' => "academic_credentials.{$action}"],
-                ['module' => 'academic_credentials', 'action' => $action],
-            );
-            $user->givePermissionTo($permission->name);
-        }
+        $permission = Permission::query()->firstOrCreate(
+            ['name' => 'atestados.gestionar'],
+            ['module' => 'atestados', 'action' => 'gestionar'],
+        );
+        $user->givePermissionTo($permission->name);
 
         return $user;
     }

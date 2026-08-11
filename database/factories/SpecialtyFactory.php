@@ -17,7 +17,7 @@ class SpecialtyFactory extends Factory
         // Small, UNIQUE-constrained vocabulary — callers should prefer
         // Specialty::inRandomOrder()->value('id') and only create when none exist.
         return [
-            'name' => fake()->randomElement([
+            'name' => fake()->unique()->randomElement([
                 'Information Systems Engineering',
                 'Computer Engineering',
                 'Business Administration',

@@ -26,7 +26,7 @@ class AcademicCredentialForm extends Form
     public function rules(): array
     {
         return [
-            'specialtyId' => ['required', 'integer', 'exists:specialties,id'],
+            'specialtyId' => ['required', 'integer', 'exists:especialidades,id'],
             'degreeLevel' => ['required', Rule::enum(DegreeLevel::class)],
             'institution' => ['required', 'string', 'max:150'],
             'yearObtained' => ['required', 'integer', 'min:1950', 'max:'.date('Y')],

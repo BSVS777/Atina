@@ -17,7 +17,7 @@ class PositionFactory extends Factory
         // Small, UNIQUE-constrained vocabulary — callers should prefer
         // Position::inRandomOrder()->value('id') and only create when none exist.
         return [
-            'name' => fake()->randomElement([
+            'name' => fake()->unique()->randomElement([
                 'Professor 2', 'Professor 3', 'Professor 4', 'Specialist Professor 1',
             ]),
         ];

@@ -27,9 +27,9 @@ class TeacherProfileComponentTest extends TestCase
         $teacher = Teacher::factory()->create(['first_name' => 'Ana', 'last_name' => 'Rojas']);
         $specialty = Specialty::factory()->create(['name' => 'Food Engineering']);
         AcademicCredential::factory()->create([
-            'teacher_id' => $teacher->id,
-            'specialty_id' => $specialty->id,
-            'institution' => 'University of Costa Rica',
+            'docente_id' => $teacher->id,
+            'especialidad_id' => $specialty->id,
+            'institucion' => 'University of Costa Rica',
         ]);
 
         $this->actingAs(User::factory()->create());

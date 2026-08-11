@@ -8,11 +8,16 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('permissions')) {
+            return;
+        }
+
         Schema::create('permissions', function (Blueprint $table) {
             $table->id();
-            $table->string('module');
-            $table->string('action');
+            $table->string('module')->nullable();
+            $table->string('action')->nullable();
             $table->string('name')->unique();
+            $table->string('description')->nullable();
             $table->timestamps();
 
             $table->index('module');

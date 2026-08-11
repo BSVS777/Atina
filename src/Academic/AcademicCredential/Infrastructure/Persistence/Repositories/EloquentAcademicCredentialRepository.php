@@ -10,7 +10,13 @@ use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositor
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 use Src\Academic\AcademicCredential\Domain\YearObtained;
+use Src\Academic\AcademicCredential\Infrastructure\Persistence\Casts\DegreeLevelCast;
 
+/**
+ * The only place (besides the Eloquent model itself) aware that the
+ * underlying table is the professor-provided `atestados` with Spanish
+ * column names — see AcademicCredential (App\Models) docblock.
+ */
 final class EloquentAcademicCredentialRepository implements AcademicCredentialRepositoryInterface
 {
     public function find(int $id): ?AcademicCredential
@@ -24,8 +30,8 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
     {
         /** @var Collection<int, AcademicCredentialModel> $models */
         $models = AcademicCredentialModel::query()
-            ->where('teacher_id', $teacherId)
-            ->orderBy('year_obtained', 'desc')
+            ->where('docente_id', $teacherId)
+            ->orderBy('anio_obtencion', 'desc')
             ->get();
 
         return $models->map($this->toDomain(...))->all();
@@ -38,9 +44,9 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
         ?int $exceptCredentialId = null,
     ): bool {
         return AcademicCredentialModel::query()
-            ->where('teacher_id', $teacherId)
-            ->where('specialty_id', $specialtyId)
-            ->where('degree_level', $degreeLevel)
+            ->where('docente_id', $teacherId)
+            ->where('especialidad_id', $specialtyId)
+            ->where('grado', DegreeLevelCast::toDatabaseValue($degreeLevel))
             ->when($exceptCredentialId !== null, fn ($query) => $query->whereKeyNot($exceptCredentialId))
             ->exists();
     }
@@ -52,11 +58,11 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
             : new AcademicCredentialModel;
 
         $model->fill([
-            'teacher_id' => $credential->teacherId(),
-            'specialty_id' => $credential->specialtyId(),
-            'degree_level' => $credential->degreeLevel(),
-            'institution' => $credential->institution(),
-            'year_obtained' => $credential->yearObtained()->value(),
+            'docente_id' => $credential->teacherId(),
+            'especialidad_id' => $credential->specialtyId(),
+            'grado' => $credential->degreeLevel(),
+            'institucion' => $credential->institution(),
+            'anio_obtencion' => $credential->yearObtained()->value(),
         ]);
         $model->save();
 
@@ -67,11 +73,11 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
     {
         return new AcademicCredential(
             id: $model->id,
-            teacherId: $model->teacher_id,
-            specialtyId: $model->specialty_id,
-            degreeLevel: $model->degree_level,
-            institution: $model->institution,
-            yearObtained: new YearObtained($model->year_obtained),
+            teacherId: $model->docente_id,
+            specialtyId: $model->especialidad_id,
+            degreeLevel: $model->grado,
+            institution: $model->institucion,
+            yearObtained: new YearObtained($model->anio_obtencion),
         );
     }
 }

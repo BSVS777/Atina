@@ -18,8 +18,11 @@ final class Role
     /**
      * Structural roles the system depends on (seeders, Gate::before).
      * Cannot be renamed or deleted — permissions may still be edited.
+     * "Administrador" replaces the old SIGA-only "Admin": the
+     * professor-provided database already seeds "Administrador" as the
+     * top administrative role — see Docs/DIARIO_DECISIONES_IA.md.
      */
-    private const PROTECTED_NAMES = ['Superadmin', 'Admin'];
+    private const PROTECTED_NAMES = ['Superadmin', 'Administrador'];
 
     private function __construct(
         private readonly ?int $id,
@@ -29,7 +32,7 @@ final class Role
     ) {}
 
     /**
-     * @param array<int, string> $permissions
+     * @param  array<int, string>  $permissions
      */
     public static function create(string $name, array $permissions = []): self
     {
@@ -37,7 +40,7 @@ final class Role
     }
 
     /**
-     * @param array<int, string> $permissions
+     * @param  array<int, string>  $permissions
      */
     public static function reconstitute(int $id, string $name, array $permissions = []): self
     {
@@ -54,7 +57,7 @@ final class Role
     }
 
     /**
-     * @param array<int, string> $permissions
+     * @param  array<int, string>  $permissions
      */
     public function syncPermissions(array $permissions): void
     {
