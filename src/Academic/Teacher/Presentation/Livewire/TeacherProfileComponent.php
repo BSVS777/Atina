@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Src\Academic\Teacher\Presentation\Livewire;
 
+use App\Models\Course;
 use App\Models\Specialty;
 use App\Models\Teacher;
+use DateTimeImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
@@ -18,6 +20,7 @@ use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 use Src\Academic\AcademicCredential\Domain\Exceptions\DuplicateCredentialException;
 use Src\Academic\AcademicCredential\Presentation\Livewire\Forms\AcademicCredentialForm;
+use Src\Academic\AffinityCatalog\Application\UseCases\ResolveApplicableCatalogVersionUseCase;
 
 /**
  * Teacher profile: read-only header (see TeacherComponent for why teacher
@@ -38,6 +41,8 @@ class TeacherProfileComponent extends Component
     public ?int $editingId = null;
 
     public AcademicCredentialForm $form;
+
+    public ?int $contextCourseId = null;
 
     public function mount(Teacher $teacher): void
     {
@@ -95,13 +100,30 @@ class TeacherProfileComponent extends Component
             : __('Academic credential updated.'));
     }
 
-    public function render(ListAcademicCredentialsForTeacherUseCase $listUseCase): View
+    public function render(ListAcademicCredentialsForTeacherUseCase $listUseCase, ResolveApplicableCatalogVersionUseCase $resolveUseCase): View
     {
-        $specialties = Specialty::query()->orderBy('name')->get(['id', 'name']);
+        $specialties = Specialty::query()->orderBy('nombre')->get(['id', 'nombre']);
         $specialtyNames = $specialties->pluck('name', 'id');
 
+        $affineSpecialtyIds = null;
+        $catalogCitation = null;
+
+        if ($this->contextCourseId !== null) {
+            $resolved = $resolveUseCase->handle($this->contextCourseId, new DateTimeImmutable);
+
+            if ($resolved !== null) {
+                $affineSpecialtyIds = $resolved->version->specialtyIds();
+                $catalogCitation = __('v:number — :agreement / Gazette :gazette:provisional', [
+                    'number' => $resolved->version->versionNumber(),
+                    'agreement' => $resolved->version->councilAgreement(),
+                    'gazette' => $resolved->version->gazetteNumber(),
+                    'provisional' => $resolved->isProvisional ? ' ('.__('provisional').')' : '',
+                ]);
+            }
+        }
+
         $rows = array_map(
-            fn (AcademicCredential $credential) => $this->toRow($credential, $specialtyNames),
+            fn (AcademicCredential $credential) => $this->toRow($credential, $specialtyNames, $affineSpecialtyIds),
             $listUseCase->handle($this->teacher->id),
         );
 
@@ -109,6 +131,9 @@ class TeacherProfileComponent extends Component
             'rows' => $rows,
             'specialties' => $specialties,
             'degreeLevels' => DegreeLevel::cases(),
+            'courses' => Course::query()->orderBy('nombre')->get(),
+            'contextEvaluated' => $this->contextCourseId !== null,
+            'catalogCitation' => $catalogCitation,
             'canManage' => auth()->user()->can('create', AcademicCredential::class)
                 || auth()->user()->can('update', AcademicCredential::class),
         ])->layout('components.layouts.dashboard', [
@@ -119,9 +144,10 @@ class TeacherProfileComponent extends Component
 
     /**
      * @param  Collection<int, string>  $specialtyNames
+     * @param  array<int, int>|null  $affineSpecialtyIds
      * @return array<string, mixed>
      */
-    private function toRow(AcademicCredential $credential, Collection $specialtyNames): array
+    private function toRow(AcademicCredential $credential, Collection $specialtyNames, ?array $affineSpecialtyIds): array
     {
         return [
             'id' => $credential->id(),
@@ -129,6 +155,7 @@ class TeacherProfileComponent extends Component
             'degreeLevel' => $credential->degreeLevel()->value,
             'institution' => $credential->institution(),
             'yearObtained' => $credential->yearObtained()->value(),
+            'isAffine' => $affineSpecialtyIds === null ? null : in_array($credential->specialtyId(), $affineSpecialtyIds, true),
         ];
     }
 }

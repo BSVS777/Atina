@@ -110,6 +110,17 @@ select:focus[data-flux-control] {
     --badgeCustomBg: #e6f0e2;
     --badgeCustomText: #4a8f3c;
 
+    /* Affinity verification result badges (DO-02a): matched (green),
+       not-matched (red), no-catalog (amber), technical-note (blue). */
+    --badgeMatchedBg: #e6f0e2;
+    --badgeMatchedText: #4a8f3c;
+    --badgeNotMatchedBg: #fde7e7;
+    --badgeNotMatchedText: #b42318;
+    --badgeNoCatalogBg: #fff3d6;
+    --badgeNoCatalogText: #93650b;
+    --badgeTechnicalNoteBg: #dce7fa;
+    --badgeTechnicalNoteText: #0b3c8c;
+
     /* Row action icons — matches the approved design's edit (amber) /
        delete (red) circular icon buttons exactly. */
     --actionEditBg: #fff3d6;
@@ -140,6 +151,15 @@ select:focus[data-flux-control] {
     --badgeSystemText: #a9c0ec;
     --badgeCustomBg: #16321f;
     --badgeCustomText: #7fd28f;
+
+    --badgeMatchedBg: #16321f;
+    --badgeMatchedText: #7fd28f;
+    --badgeNotMatchedBg: #3a1620;
+    --badgeNotMatchedText: #ff9b9b;
+    --badgeNoCatalogBg: #3a2c0e;
+    --badgeNoCatalogText: #f2c063;
+    --badgeTechnicalNoteBg: #1c3564;
+    --badgeTechnicalNoteText: #82acf7;
 
     --actionEditBg: #3a2c0e;
     --actionEditText: #f2c063;
@@ -785,6 +805,22 @@ select:focus[data-flux-control] {
   .status-badge.custom {
     background: var(--badgeCustomBg);
     color: var(--badgeCustomText);
+  }
+  .status-badge.affinity-matched {
+    background: var(--badgeMatchedBg);
+    color: var(--badgeMatchedText);
+  }
+  .status-badge.affinity-not-matched {
+    background: var(--badgeNotMatchedBg);
+    color: var(--badgeNotMatchedText);
+  }
+  .status-badge.affinity-no-catalog {
+    background: var(--badgeNoCatalogBg);
+    color: var(--badgeNoCatalogText);
+  }
+  .status-badge.affinity-technical-note {
+    background: var(--badgeTechnicalNoteBg);
+    color: var(--badgeTechnicalNoteText);
   }
   .actions-cell {
     display: flex;
