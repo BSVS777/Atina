@@ -12,6 +12,20 @@ use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositor
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 use Src\Academic\AcademicCredential\Infrastructure\Persistence\Repositories\EloquentAcademicCredentialRepository;
 use Src\Academic\AcademicCredential\Presentation\Policies\AcademicCredentialPolicy;
+use Src\Academic\AffinityCatalog\Domain\Contracts\AffinityCatalogVersionRepositoryInterface;
+use Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion;
+use Src\Academic\AffinityCatalog\Infrastructure\Persistence\Repositories\EloquentAffinityCatalogVersionRepository;
+use Src\Academic\AffinityCatalog\Presentation\Policies\AffinityCatalogVersionPolicy;
+use Src\Academic\TeacherAssignment\Domain\Contracts\AffinityVerificationRepositoryInterface;
+use Src\Academic\TeacherAssignment\Domain\Contracts\TeacherAssignmentRepositoryInterface;
+use Src\Academic\TeacherAssignment\Domain\Contracts\TechnicalNoteRepositoryInterface;
+use Src\Academic\TeacherAssignment\Domain\Entities\TeacherAssignment;
+use Src\Academic\TeacherAssignment\Domain\Entities\TechnicalNote;
+use Src\Academic\TeacherAssignment\Infrastructure\Persistence\Repositories\EloquentAffinityVerificationRepository;
+use Src\Academic\TeacherAssignment\Infrastructure\Persistence\Repositories\EloquentTeacherAssignmentRepository;
+use Src\Academic\TeacherAssignment\Infrastructure\Persistence\Repositories\EloquentTechnicalNoteRepository;
+use Src\Academic\TeacherAssignment\Presentation\Policies\TeacherAssignmentPolicy;
+use Src\Academic\TeacherAssignment\Presentation\Policies\TechnicalNotePolicy;
 use Src\IdentityAccess\Permission\Domain\Contracts\PermissionRepositoryInterface;
 use Src\IdentityAccess\Permission\Domain\Entities\Permission;
 use Src\IdentityAccess\Permission\Infrastructure\Persistence\Repositories\EloquentPermissionRepository;
@@ -39,6 +53,10 @@ final class DomainServiceProvider extends ServiceProvider
         PdfExporterInterface::class => SpatiePdfExporter::class,
         AcademicCredentialRepositoryInterface::class => EloquentAcademicCredentialRepository::class,
         AuditLogRepositoryInterface::class => EloquentAuditLogRepository::class,
+        AffinityCatalogVersionRepositoryInterface::class => EloquentAffinityCatalogVersionRepository::class,
+        TeacherAssignmentRepositoryInterface::class => EloquentTeacherAssignmentRepository::class,
+        AffinityVerificationRepositoryInterface::class => EloquentAffinityVerificationRepository::class,
+        TechnicalNoteRepositoryInterface::class => EloquentTechnicalNoteRepository::class,
     ];
 
     /**
@@ -48,6 +66,9 @@ final class DomainServiceProvider extends ServiceProvider
         Role::class => RolePolicy::class,
         Permission::class => PermissionPolicy::class,
         AcademicCredential::class => AcademicCredentialPolicy::class,
+        AffinityCatalogVersion::class => AffinityCatalogVersionPolicy::class,
+        TeacherAssignment::class => TeacherAssignmentPolicy::class,
+        TechnicalNote::class => TechnicalNotePolicy::class,
     ];
 
     public function register(): void
