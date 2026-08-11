@@ -403,3 +403,260 @@ tree) without discarding either, and without pushing anything.
   changing A's tree" — worth remembering as the standard pattern for
   reconciling a rebrand/refoundation scenario where two previously separate
   projects need connected history without a real file-level merge.
+
+---
+
+## 2026-08-11 — Academic Affinity module (DO-01/DO-02/DO-02a/DO-02b/DO-02d): reversal of the English-schema decision and reconciliation with the professor's real MySQL database
+
+### AI consultation
+
+The user asked to implement `IMPLEMENT_ACADEMIC_AFFINITIES.md` in full,
+using `Docs/requirements/Proyecto_3_Gestion_Docente_Atinencias.docx` (the
+SRS excerpt: FR-DO-01, DO-02, DO-02a, DO-02b, DO-02d) as the primary source
+of truth, working autonomously through discovery, reconciliation, the new
+module, tests, and verification.
+
+### Accepted
+
+- **MySQL target reconciliation, reversing the 2026-08-10 decision.** The
+  earlier entry above explicitly chose to keep SIGA's schema in English and
+  *not* treat the professor's shared schema as an external contract. The
+  user corrected this today: connected to the real local MySQL instance and
+  discovered `gestion_academica_utn_test` — a professor-provided database
+  already containing the exact institutional schema (`docentes`,
+  `atestados`, `catalogos_atinencia`, `catalogo_atinencia_especialidad`,
+  `verificaciones_atinencia`, `notas_tecnicas`, `asignaciones_docentes`,
+  `carreras`, `cursos`, `periodos_academicos`, `grupos`, `roles`,
+  `permissions`, real seeded roles/permissions/role-permission matrix). The
+  user's explicit instruction: this database is the persistence source of
+  truth; do not create a replacement `siga`/`siga_test` database; reconcile
+  SIGA's migrations onto it non-destructively; keep Spanish identifiers at
+  the schema boundary; keep all code (Domain/Application/Presentation)
+  English. I initially misread the first ambiguity here — see Corrections.
+- **Idempotent/guarded migrations as the reconciliation mechanism.** Every
+  migration that touches a table the official database might already have
+  starts with `Schema::hasTable()`/`Schema::hasColumn()` guards. Running
+  plain `php artisan migrate` (never `--fresh`) is then safe in both
+  directions: against the real `gestion_academica_utn_test` (guards skip
+  already-existing tables/columns, only genuinely new/additive changes
+  apply) and against a fresh environment (sqlite test suite), which builds
+  the full official-shaped schema from scratch. Verified both paths: the
+  real database migrated cleanly with zero data loss (spot-checked
+  `roles`/`permissions` row counts before/after), and the sqlite test suite
+  (85 tests) passes against a schema built the same way.
+- **Additive-only schema changes on the official database.** Three real
+  gaps existed between SIGA's needs and the official schema: `users` was
+  missing `avatar_path`; `permissions` was missing `module`/`action` (used
+  throughout SIGA's own Role/Permission checklist UI) — backfilled for the
+  16 pre-existing rows by splitting `name` on its first `.`; and
+  `verificaciones_atinencia` was missing a way to record which academic
+  credential justified an "Atinente" result (`IMPLEMENT_ACADEMIC_AFFINITIES.md`
+  §13 requires this). All three were additive, nullable, non-breaking
+  `ALTER TABLE` migrations — no official column or row was renamed, dropped,
+  or had its meaning changed.
+- **English/Spanish boundary: two different techniques depending on whether
+  the entity already goes through a Domain+Repository layer.** For plain
+  Eloquent models with no Domain wrapper (`Position`, `Specialty`,
+  `Teacher`, `Career`, `Course`, `AcademicTerm`) — used directly from
+  Presentation/Blade — added Laravel 11 `Attribute::make(get:, set:)`
+  virtual accessors so every other layer reads/writes English attribute
+  names (`$teacher->firstName`) while the real column stays Spanish
+  (`nombre`). This does **not** cover query-builder-level column references
+  (`orderBy()`, `get([...])`, `firstOrCreate()`), which still need the real
+  Spanish column name — fixed each such call site explicitly (documented in
+  Corrections). For entities already behind a Domain entity + Repository
+  (`AcademicCredential`, `AuditLog`, and the new `AffinityCatalogVersion`,
+  `TeacherAssignment`, `AffinityVerification`, `TechnicalNote`), the
+  Eloquent model keeps the raw Spanish column names directly, and only the
+  Repository's `toDomain()`/`save()` methods (Infrastructure layer) know
+  about them — Domain/Application/Presentation never see a Spanish
+  identifier. This second pattern needed no accessors and is the one used
+  for every genuinely new business entity in this module.
+- **Custom `CastsAttributes` classes for four native MySQL ENUM columns
+  with literal Spanish values** (`atestados.grado`, `auditorias.accion`,
+  `asignaciones_docentes.estado`, `verificaciones_atinencia.resultado`,
+  `notas_tecnicas.estado`): `DegreeLevelCast`, `ProposalStatusCast`,
+  `VerificationResultCast`, `TechnicalNoteStatusCast`. Each has a
+  `TO_DATABASE` map and a `toDatabaseValue()` static helper reused by
+  repositories for raw `where()` clauses (Eloquent unwraps PHP enums in
+  query bindings using their *English* backing value, which would silently
+  fail to match a literal-Spanish-ENUM column without this translation).
+- **Business logic taken from the physical schema, not invented,
+  wherever the schema was more specific than the SRS text.** Read
+  `catalogo_atinencia_especialidad` (specialty id only, no degree-level
+  column) as the authoritative resolution of the SRS's ambiguous "al menos
+  un grado del docente figura en la entrada": affinity matching compares
+  **specialty only**, any degree level counts — the schema simply cannot
+  express a degree-level requirement, so the matching algorithm doesn't
+  either.
+- **Adopted Atina's own `DUDAS_LOGICA_NEGOCIO.md` (its documented
+  design-ambiguity log, later partially resolved against the same
+  professor schema) as a secondary reference for the ambiguities the SRS
+  text itself doesn't resolve**, subordinate to the Word statement and the
+  physical schema: D5/D6 (catalog version resolution when no entry's
+  validity window covers the target date — implemented exactly as
+  documented: pick the entry with the latest `vigencia_inicio` that is
+  still ≤ the target date; if none exists, pick the earliest entry
+  instead; flag both as provisional), D7 (overlapping validity ranges
+  blocked in the application layer, not a DB constraint), D10/D11
+  (verifications are immutable snapshots — new events are appended, never
+  recalculated), D12 (a Technical Note never overwrites the original
+  verification's `resultado` — implemented as an *appended* new
+  `AffinityVerification` row with `result = TechnicalNote`, leaving the
+  original `NotMatched`/`NoCatalog` row untouched; this is the rubric's
+  explicit Excelente/Regular differentiator), D13 (ratification is a real,
+  separate manual action — `RatifyTechnicalNoteUseCase`/
+  `RejectTechnicalNoteUseCase` — not just automatic expiry), D14 (an
+  expired Technical Note is terminal; retrying requires a brand-new
+  `TeacherAssignment`, not a reopened one — enforced structurally, since
+  `notas_tecnicas.asignacion_docente_id` is unique).
+- **Authorization matrix read directly off the official
+  `permission_role` table**, not invented or copied from SIGA's own
+  `module.create/edit/...` convention: `atestados.gestionar` (Administrador
+  + Coordinadora de Docencia) gates DO-01 credential mutation;
+  `catalogo.gestionar` (Administrador only) gates DO-02 catalog version
+  creation; `atinencia.verificar` (Administrador + Coordinadora) gates
+  proposing an assignment, attaching a Technical Note, and the DO-02d
+  manual no-catalog decision; `nota_tecnica.aprobar` (Administrador only)
+  gates ratifying/rejecting a Technical Note. Retired SIGA's own
+  self-invented `academic_credentials.create`/`.edit` permissions in favor
+  of the single official `atestados.gestionar` (the official schema does
+  not split create/edit for this action). `RoleSeeder` no longer seeds a
+  separate `Admin` role — the official `Administrador` already fills that
+  purpose — and now reproduces all 9 official roles, the 16 official
+  permissions, and the real role→permission matrix, so a fresh/test
+  environment's RBAC substrate matches production instead of only having
+  SIGA's `Superadmin`.
+- **`APP_LOCALE=en` → `es`** (`.env` and `.env.example`). Discovered while
+  browser-verifying the new screens: the project's own `lang/es.json`
+  already had ~140 pre-existing Spanish translations (plus everything
+  added for this module) that were silently never applied because the
+  configured locale was English and no locale-switching code exists
+  anywhere in the app — every `__()` call across the *entire* application,
+  not just this module, was rendering its raw English key. This
+  contradicts `AI_HARNESS.md`'s explicit "UI is Spanish" rule. Fixed the
+  default; verified full-suite (85/85) still passes and re-verified the new
+  screens render correctly in Spanish afterward.
+- **Scope-narrowed three professor-owned tables deliberately**, documented
+  as such rather than fully modeled: `cursos` (only `carrera_id`, `codigo`,
+  `nombre`, `activo` — the real table's `es_servicio`/`es_cuello_botella`/
+  `requiere_laboratorio`/`tipo_laboratorio` are scheduling/curriculum
+  concerns this module doesn't touch; transversal/service courses shared
+  across multiple careers are explicitly out of scope, so `carrera_id` is
+  treated as required, not nullable, in this module's own understanding of
+  the schema); `grupos` (only `curso_id`, `periodo_academico_id`, `numero`
+  are meaningful here — `meta_id`/`modalidad_id`/`cupo` are mandatory
+  columns owned by the room/HR-scheduling module and get a fixed bootstrap
+  value, never exposed to this module's domain or UI); `asignaciones_docentes`
+  (only `grupo_id`, `docente_id`, `estado` are used — `jornada` is a
+  mandatory HR workload-fraction column with no default on the real table,
+  set to a fixed `1.00` placeholder; `condicion_nombramiento`,
+  `quincena`, `numero_accion_personal`, `observacion` are untouched).
+  `asignacion_cambios` (schedule/room change history) was not implemented
+  at all — it belongs to a different, unbuilt module (room/schedule
+  management), not DO-01/02/02a/02b/02d.
+
+### Rejected
+
+- Creating a new `siga`/`siga_test` MySQL database, even temporarily — the
+  user was explicit and immediate about this being unacceptable once the
+  official database's real purpose was clarified; the databases created in
+  the brief window before that correction landed were dropped immediately.
+- Running `migrate:fresh` or any destructive command against
+  `gestion_academica_utn_test` at any point.
+- A generic polymorphic "Files" module for the Technical Note's PDF
+  attachment — the professor's schema already has a generic `archivos`
+  table built for exactly this purpose (its `tipo_documento` column
+  comment even lists "Criterio Técnico" as an example); reused it directly
+  (`App\Models\Archivo`, no Domain wrapper, created only from
+  `EloquentTechnicalNoteRepository`) instead of inventing a parallel
+  attachment mechanism.
+- Modeling `AffinityCatalog` as a separate parent entity above
+  `AffinityCatalogVersion` — the official `catalogos_atinencia` table has
+  no separate "catalog header" row; each version is already a complete,
+  self-sufficient, immutable row keyed by `(curso_id, version)`. Adding a
+  header entity would have been ceremony with no corresponding schema
+  concept.
+- A separate `AffinityVerification`-vs-`TeacherAssignment` split modeled as
+  two independently-created aggregates — the official schema already
+  expresses this exactly as "one `asignaciones_docentes` row (coarse
+  Proposed/Confirmed/Rejected status) with an append-only
+  `verificaciones_atinencia` trail attached to it," which is what got
+  built; a richer, invented status enum on the assignment itself (blocked/
+  pending-manual/etc., considered early in the session) was dropped in
+  favor of reading that nuance off the latest verification's `resultado`
+  instead, matching the real column's only three values.
+
+### Corrections
+
+- **Put a real MySQL password directly into `phpunit.xml`** (a tracked,
+  committed file) for a few minutes before realizing the mistake — caught
+  it myself before the user flagged it, removed it immediately, and moved
+  the credential into `.env.testing`, added to `.gitignore`. That
+  particular file was later deleted anyway once the `siga_test` approach
+  was reversed, but the lesson (never put a live secret in a tracked
+  config file, even as a "temporary" step) stands.
+- **Misjudged which database the user meant on the first pass.** After
+  discovering the professor's schema in `gestion_academica_utn_test`, I
+  initially proposed (and briefly executed, before the user's correction)
+  creating fresh `siga`/`siga_test` databases and treating the professor's
+  database as read-only inspection material only. The user corrected this
+  twice in the same exchange: first to stop and not create replacement
+  databases, then (after providing credentials) to explicitly confirm
+  `gestion_academica_utn_test` itself is the target for ongoing
+  development, with `siga_test`-style disposable-database validation
+  replaced by non-destructive `migrate:status` + guarded `migrate` +
+  read/write smoke queries.
+- **`AcademicManagementDemoSeeder` and `AffinityDemoSeeder` were not
+  idempotent on the first attempts**, which surfaced as real errors against
+  the real database mid-session: a leftover `teacher_id`/`degree_level`
+  array-key bug (pre-existing seeder using the old English column names,
+  not yet touched by the reconciliation pass) failed loudly with a MySQL
+  "unknown column" error; then a second run duplicated 8 teachers because
+  the seeder unconditionally called `Teacher::factory()->count(8)->create()`
+  every run. Fixed both: corrected the column names, and added a
+  `Teacher::query()->count() > 0` / `asignaciones_docentes` existence guard
+  so re-running `db:seed` against the real database is safe. Left the
+  ~8 extra duplicate demo teachers created during the debugging cycle in
+  place rather than attempting a cleanup `DELETE` against the shared
+  database — harmless (small, clearly fake factory data) and safer than a
+  destructive fix.
+- **`SpecialtyFactory`/`PositionFactory` used `fake()->randomElement()`
+  over an 8/4-item fixed list without `unique()`**, which caused a
+  real (not hypothetical) `UNIQUE constraint failed: especialidades.nombre`
+  test failure once a test created two specialties in the same run. Fixed
+  by switching both factories to `fake()->unique()->randomElement(...)`.
+- **PHPStan caught several real gaps on the first pass**: two new Eloquent
+  models (`TeacherAssignment`, `Archivo`) were missing `use HasFactory`
+  despite their factories existing, so `::factory()` calls would have
+  failed at runtime the first time anything outside the test suite's happy
+  path exercised them; `auth()->id()` returns `int|string|null` (not
+  `int|null`) and was passed directly into several use cases typed
+  `?int $actorUserId` — switched every call site to `auth()->user()?->id`,
+  which matches the existing convention already used elsewhere in the
+  codebase (`TeacherProfileComponent`); the three new `CastsAttributes::set()`
+  methods were missing `@return array<string, string>` PHPDoc.
+
+### Learning
+
+- Reading the *actual* target database's schema (via read-only
+  `SHOW CREATE TABLE`) before designing anything turned what would have
+  been a from-scratch, guessed design for DO-02/02a/02b/02d into a direct
+  port of an already-correct, already-battle-tested schema — the
+  `especialidades`-only (no degree-level) affinity match, the append-only
+  verification trail, and the explicit `Ratificada`/`Rechazada`/`Vencida`
+  Technical Note states were all things I would likely have designed
+  differently (and less correctly, per the rubric's own stated
+  Excelente/Regular criteria) without that inspection.
+- A migration guarded with `Schema::hasTable()`/`hasColumn()` is a strong,
+  general pattern for "this project's migrations must build correctly on
+  both a fresh environment and an environment where the official schema
+  already exists" — worth keeping as the default template for any future
+  work against this same professor-provided database, rather than
+  special-casing it per table.
+- Virtual English attribute accessors (`Attribute::make`) are a clean
+  solution for plain, Presentation-facing models, but they have a real
+  blind spot: Eloquent's query builder (`where`, `orderBy`, column-selecting
+  `get()`, `firstOrCreate`) never goes through them. Any model using this
+  pattern needs its raw-query call sites audited by hand; there is no way
+  to make the accessor "leak" into query building automatically.
