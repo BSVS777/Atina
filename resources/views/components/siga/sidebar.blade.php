@@ -71,42 +71,52 @@
                 </svg>
             </a>
 
-            <a href="{{ route('academic.teacher.index') }}" wire:navigate wire:current="active" class="nav-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="10" cy="7" r="4"></circle>
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                </svg>
-                <span class="nav-text" data-labels>{{ __('Teachers') }}</span>
-                <svg class="nav-chevron" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;">
-                    <polyline points="9 6 15 12 9 18"></polyline>
-                </svg>
-            </a>
+            <div
+                x-data="{
+                    open: false,
+                    groupActive: false,
+                    syncTeacherGroup() {
+                        const path = window.location.pathname;
+                        const routes = ['{{ route('academic.teacher.index') }}', '{{ route('academic.affinity-catalog.index') }}', '{{ route('academic.teacher-assignment.index') }}'];
+                        this.groupActive = routes.some((url) => path === new URL(url).pathname);
+                        this.open = this.groupActive;
+                    },
+                }"
+                x-init="syncTeacherGroup()"
+                x-on:livewire:navigated.window="syncTeacherGroup()"
+            >
+                <a href="{{ route('academic.teacher.index') }}" wire:navigate class="nav-item nav-parent" :class="{ active: groupActive }">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="10" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <span class="nav-text" data-labels>{{ __('Teachers') }}</span>
+                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" @click.stop.prevent="open = !open">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </a>
+                <div class="nav-children" :class="{ 'open': open }" data-labels>
+                    @can('create', \Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion::class)
+                    <a href="{{ route('academic.affinity-catalog.index') }}" wire:navigate wire:current="active" class="nav-child">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                        </svg>
+                        <span>{{ __('Affinity Catalog') }}</span>
+                    </a>
+                    @endcan
 
-            @can('create', \Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion::class)
-            <a href="{{ route('academic.affinity-catalog.index') }}" wire:navigate wire:current="active" class="nav-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-                </svg>
-                <span class="nav-text" data-labels>{{ __('Affinity Catalog') }}</span>
-                <svg class="nav-chevron" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;">
-                    <polyline points="9 6 15 12 9 18"></polyline>
-                </svg>
-            </a>
-            @endcan
-
-            <a href="{{ route('academic.teacher-assignment.index') }}" wire:navigate wire:current="active" class="nav-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M9 11l3 3L22 4"></path>
-                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-                </svg>
-                <span class="nav-text" data-labels>{{ __('Affinity Verification') }}</span>
-                <svg class="nav-chevron" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;">
-                    <polyline points="9 6 15 12 9 18"></polyline>
-                </svg>
-            </a>
+                    <a href="{{ route('academic.teacher-assignment.index') }}" wire:navigate wire:current="active" class="nav-child">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 11l3 3L22 4"></path>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        </svg>
+                        <span>{{ __('Affinity Verification') }}</span>
+                    </a>
+                </div>
+            </div>
 
             <a href="#" @click.prevent="setSection('aulas')" class="nav-item">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

@@ -660,3 +660,98 @@ module, tests, and verification.
   `get()`, `firstOrCreate`) never goes through them. Any model using this
   pattern needs its raw-query call sites audited by hand; there is no way
   to make the accessor "leak" into query building automatically.
+
+---
+
+## 2026-08-13 — UX/UI polish pass on the Academic Affinity screens
+
+### AI consultation
+
+The user asked for a UI/UX improvement pass over the Docentes / Affinity
+Catalog / Affinity Verification screens (sidebar nesting, catalog-version
+modal, proposed-assignments table, "propose teacher" and "technical note"
+modals), under a hard constraint: reuse the existing visual system exactly
+(no new colors, badges, typography, components, or dependencies), and keep
+the change composition/layout-only.
+
+### Accepted
+
+- **Sidebar nesting** (`resources/views/components/siga/sidebar.blade.php`):
+  made "Docentes" a parent nav item with "Catálogo de atinencias" and
+  "Verificación de atinencias" as children, reusing the `nav-parent` /
+  `nav-children` / `chevron-toggle` classes and Alpine toggle idiom already
+  established there for the placeholder "Groups"/"Reports" sections — zero
+  new CSS. Because the `<aside>` sidebar is `x-persist`ed across
+  `wire:navigate` transitions (a deliberate choice documented inline, to
+  avoid breaking `align-items: stretch`), the new group's DOM node is only
+  ever mounted once; a small Alpine helper (`syncTeacherGroup`, run on
+  `x-init` and on the `livewire:navigated` window event) recomputes both the
+  parent's "active" state and open/closed state from `window.location.pathname`
+  on every SPA navigation, since a one-time Blade `request()->routeIs()`
+  check would go stale the moment the user navigates away from the first
+  page they ever loaded.
+- **Affinity Catalog modal** (`AffinityCatalogComponent.php` +
+  its view): grouped the create-version form into three visually separated
+  blocks (legal documentation, validity period, affine specialties) using
+  the `control-group` class (already used elsewhere as a small uppercase
+  eyebrow label) purely for section headers — no new class. Replaced the
+  specialties checklist's bare unbounded `<div>` with the exact
+  `permissions-list`/`permission-item` pattern already used by the Roles
+  CRUD (bounded height, scrollable), and reused that same screen's Alpine
+  local-filter idiom for a specialty search box — added only when there are
+  more than 8 specialties, per the brief's explicit "only add search if a
+  reusable pattern already exists" rule.
+- **Proposed-assignments table** (`TeacherAssignmentComponent` view):
+  rebalanced column widths (narrower Actions column, wider
+  Catalog/justification column), top-aligned multi-badge cells instead of
+  center-aligning them against single-line cells, and split the
+  catalog-citation + technical-note-badge cell into a flex column instead of
+  a manual `<br>`. No badge colors, business rules, or Livewire method names
+  touched.
+- **Modals**: added one contextual sentence to the "Propose teacher" modal
+  (clarifies the teacher→group→verify dependency) and one muted helper line
+  under "Ratification deadline" in the technical-note modal (states that an
+  Administrator must ratify before that date) — both net-new `lang/es.json`
+  keys, both plain text using the existing `textSecondary`/`textMuted`
+  tokens, no new components.
+
+### Rejected
+
+- A searchable/autocomplete `<select>` for the Teacher field in the
+  "propose teacher" modal — no such reusable component exists in the
+  codebase (confirmed via full-repo search), and the brief explicitly
+  forbids adding an external dependency just for this.
+- A disabled-until-valid state on the "Verificar atinencia" primary button —
+  no existing screen in the codebase implements that pattern, and the brief
+  said to add it only if the pattern already existed.
+- Touching the Teachers list/profile screens beyond the sidebar entry — the
+  brief gave no specific density/hierarchy complaint about them (unlike
+  Catalog/Verification/Assignments), and they already use the shared
+  `<x-ui.data-table>` component cleanly; changing them would have been
+  scope creep against "smallest reviewable diff."
+
+### Corrected
+
+- None — Pint and the full test suite (`php artisan test`, 85/85) passed on
+  the first run; no server-side/business logic was touched (all changes are
+  Blade markup, inline scoped styles reusing existing CSS custom properties,
+  one Alpine snippet, and one new read-only view variable
+  `selectedCourse`).
+
+### Learning
+
+- `wire:current` cannot express "this parent is active because one of its
+  *sibling* routes is active" — it only compares its own element's `href`
+  to the current URL. Combined with `x-persist` (which means the sidebar's
+  Alpine scopes mount once, not per navigation), any "parent glows active
+  when a child page is open" requirement in this codebase needs a small
+  explicit `livewire:navigated`-driven recompute, not `wire:current` alone.
+- Browser-based verification (Playwright/Puppeteer) was not runnable in this
+  environment: the project's Python has no `pip`/`playwright`, and the
+  `puppeteer` npm dependency has no Chrome binary downloaded
+  (`puppeteer browsers install chrome` was not run, since downloading a
+  browser binary wasn't something to do unprompted). Verification for this
+  change therefore relied on the full automated test suite (85/85 passing,
+  unchanged assertions on rendered text used by `assertSee`), Pint, and
+  direct diff review — not a real rendered screenshot. Flagged to the user
+  as the one open risk in this change.

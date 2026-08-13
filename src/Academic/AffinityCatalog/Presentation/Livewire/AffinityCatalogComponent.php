@@ -87,6 +87,7 @@ class AffinityCatalogComponent extends Component
             'specialties' => $specialties,
             'rows' => $rows,
             'canManage' => auth()->user()->can('create', AffinityCatalogVersion::class),
+            'selectedCourse' => $courses->firstWhere('id', $this->selectedCourseId),
         ])->layout('components.layouts.dashboard', [
             'title' => __('Affinity Catalog'),
             'subtitle' => __('Versioned catalog of career/course academic affinity'),

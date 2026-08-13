@@ -12,7 +12,12 @@
 
     <div class="card">
         <div class="card-head">
-            <span class="card-title">{{ __('Catalog versions') }}</span>
+            <div>
+                <span class="card-title">{{ __('Catalog versions') }}</span>
+                @if ($selectedCourse)
+                <div style="font-size:12.5px; color:var(--textMuted); margin-top:2px;">{{ $selectedCourse->code }} — {{ $selectedCourse->name }}</div>
+                @endif
+            </div>
             @if ($canManage)
             <div class="card-actions">
                 <button type="button" class="btn btn-orange" wire:click="openCreateModal">
@@ -64,38 +69,60 @@
             </select>
             @error('form.courseId') <span class="form-error">{{ $message }}</span> @enderror
         </div>
-        <div class="form-field">
-            <label for="catalogVersionAgreement">{{ __('Council agreement') }}</label>
-            <input type="text" id="catalogVersionAgreement" wire:model="form.councilAgreement" class="{{ $errors->has('form.councilAgreement') ? 'has-error' : '' }}">
-            @error('form.councilAgreement') <span class="form-error">{{ $message }}</span> @enderror
+        <div>
+            <span class="control-group" style="margin-bottom:10px;">{{ __('Legal documentation') }}</span>
+            <div class="form-field" style="margin-bottom:14px;">
+                <label for="catalogVersionAgreement">{{ __('Council agreement') }}</label>
+                <input type="text" id="catalogVersionAgreement" wire:model="form.councilAgreement" class="{{ $errors->has('form.councilAgreement') ? 'has-error' : '' }}">
+                @error('form.councilAgreement') <span class="form-error">{{ $message }}</span> @enderror
+            </div>
+            <div class="form-field">
+                <label for="catalogVersionGazette">{{ __('Gazette number') }}</label>
+                <input type="text" id="catalogVersionGazette" wire:model="form.gazetteNumber" class="{{ $errors->has('form.gazetteNumber') ? 'has-error' : '' }}">
+                @error('form.gazetteNumber') <span class="form-error">{{ $message }}</span> @enderror
+            </div>
         </div>
-        <div class="form-field">
-            <label for="catalogVersionGazette">{{ __('Gazette number') }}</label>
-            <input type="text" id="catalogVersionGazette" wire:model="form.gazetteNumber" class="{{ $errors->has('form.gazetteNumber') ? 'has-error' : '' }}">
-            @error('form.gazetteNumber') <span class="form-error">{{ $message }}</span> @enderror
+
+        <div style="border-top:1px solid var(--border); padding-top:18px;">
+            <span class="control-group" style="margin-bottom:10px;">{{ __('Validity period') }}</span>
+            <div class="form-field" style="margin-bottom:14px;">
+                <label for="catalogVersionStart">{{ __('Effective from') }}</label>
+                <input type="date" id="catalogVersionStart" wire:model="form.effectiveStartDate" class="{{ $errors->has('form.effectiveStartDate') ? 'has-error' : '' }}">
+                @error('form.effectiveStartDate') <span class="form-error">{{ $message }}</span> @enderror
+            </div>
+            <div class="form-field">
+                <label for="catalogVersionEnd">{{ __('Effective until (optional)') }}</label>
+                <input type="date" id="catalogVersionEnd" wire:model="form.effectiveEndDate">
+                @error('form.effectiveEndDate') <span class="form-error">{{ $message }}</span> @enderror
+            </div>
         </div>
-        <div class="form-field">
-            <label for="catalogVersionStart">{{ __('Effective from') }}</label>
-            <input type="date" id="catalogVersionStart" wire:model="form.effectiveStartDate" class="{{ $errors->has('form.effectiveStartDate') ? 'has-error' : '' }}">
-            @error('form.effectiveStartDate') <span class="form-error">{{ $message }}</span> @enderror
-        </div>
-        <div class="form-field">
-            <label for="catalogVersionEnd">{{ __('Effective until (optional)') }}</label>
-            <input type="date" id="catalogVersionEnd" wire:model="form.effectiveEndDate">
-            @error('form.effectiveEndDate') <span class="form-error">{{ $message }}</span> @enderror
-        </div>
-        <div class="form-field">
-            <label>{{ __('Affine specialties') }}</label>
-            <div class="space-y-1">
-                @foreach ($specialties as $specialty)
-                <label style="display:flex; align-items:center; gap:.5rem; font-weight:400;">
+
+        <div style="border-top:1px solid var(--border); padding-top:18px;" x-data="{
+            specialtySearch: '',
+            catalog: @js($specialties->map(fn ($specialty) => ['id' => $specialty->id, 'name' => $specialty->name])->values()),
+            get filteredIds() {
+                const q = this.specialtySearch.trim().toLowerCase();
+                if (q === '') return this.catalog.map((specialty) => specialty.id);
+                return this.catalog.filter((specialty) => specialty.name.toLowerCase().includes(q)).map((specialty) => specialty.id);
+            },
+        }">
+            <span class="control-group" style="margin-bottom:10px;">{{ __('Affine specialties') }}</span>
+            @if ($specialties->count() > 8)
+            <input type="text" x-model.debounce.100ms="specialtySearch" placeholder="{{ __('Search specialty...') }}" style="margin-bottom:10px;">
+            @endif
+            <div class="permissions-list">
+                @forelse ($specialties as $specialty)
+                <label class="permission-item" x-show="filteredIds.includes({{ $specialty->id }})">
                     <input type="checkbox" value="{{ $specialty->id }}" wire:model="form.specialtyIds">
-                    {{ $specialty->name }}
+                    <span>{{ $specialty->name }}</span>
                 </label>
-                @endforeach
+                @empty
+                <div class="permission-empty">{{ __('No specialties available') }}</div>
+                @endforelse
             </div>
             @error('form.specialtyIds') <span class="form-error">{{ $message }}</span> @enderror
         </div>
+
         <x-slot:footer>
             <button type="button" class="btn btn-secondary" wire:click="closeModal">{{ __('Cancel') }}</button>
             <button type="button" class="btn btn-primary" wire:click="save">{{ __('Confirm') }}</button>

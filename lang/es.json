@@ -202,5 +202,11 @@
   "No course selected": "Ningún curso seleccionado",
   "Catalog applied": "Catálogo aplicado",
   "Affinity result": "Resultado de atinencia",
-  "v:number — :agreement / Gazette :gazette:provisional": "v:number — :agreement / Gaceta :gazette:provisional"
+  "v:number — :agreement / Gazette :gazette:provisional": "v:number — :agreement / Gaceta :gazette:provisional",
+  "Legal documentation": "Documentación legal",
+  "Validity period": "Vigencia",
+  "Search specialty...": "Buscar especialidad...",
+  "No specialties available": "No hay especialidades disponibles",
+  "Select a teacher and a course group to automatically verify their academic affinity.": "Selecciona un docente y un grupo de curso para verificar automáticamente su atinencia académica.",
+  "An Administrator must ratify this assignment before the deadline.": "Un Administrador debe ratificar esta asignación antes de la fecha límite."
 }

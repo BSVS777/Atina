@@ -16,7 +16,7 @@
         </div>
 
         <div class="table-scroll">
-            <div class="table-inner" style="--table-cols: 1.6fr 2fr 1fr 1.4fr 2.2fr 2fr;" role="table">
+            <div class="table-inner" style="--table-cols: 1.6fr 1.8fr 1fr 1.4fr 2.6fr 1.6fr;" role="table">
                 <div class="data-row data-row-head" role="row">
                     <span role="columnheader">{{ __('Teacher') }}</span>
                     <span role="columnheader">{{ __('Course / context') }}</span>
@@ -27,15 +27,15 @@
                 </div>
 
                 @forelse ($rows as $row)
-                <div class="data-row" role="row" wire:key="assignment-{{ $row['id'] }}">
-                    <span>{{ $row['teacher'] }}</span>
-                    <span>{{ $row['group'] }}</span>
+                <div class="data-row" role="row" wire:key="assignment-{{ $row['id'] }}" style="align-items: flex-start;">
+                    <span style="padding-top: 2px;">{{ $row['teacher'] }}</span>
+                    <span style="padding-top: 2px;">{{ $row['group'] }}</span>
                     <span>
                         <span class="status-badge {{ $row['status'] === 'confirmed' ? 'affinity-matched' : ($row['status'] === 'rejected' ? 'affinity-not-matched' : 'system') }}">
                             {{ __(ucfirst($row['status'])) }}
                         </span>
                     </span>
-                    <span>
+                    <span style="display: flex; flex-direction: column; gap: 6px;">
                         @if ($row['result'] === 'matched')
                         <span class="status-badge affinity-matched">{{ __('Atinente') }}</span>
                         @elseif ($row['result'] === 'not_matched')
@@ -49,16 +49,17 @@
                         <span class="status-badge system">{{ __('Provisional') }}</span>
                         @endif
                     </span>
-                    <span>
-                        @if ($row['catalogCitation'])
-                            {{ $row['catalogCitation'] }}
-                        @elseif ($row['result'] === 'no_catalog')
-                            {{ __('No catalog published for this course yet.') }}
-                        @else
-                            —
-                        @endif
+                    <span style="display: flex; flex-direction: column; gap: 6px; padding-top: 2px;">
+                        <span>
+                            @if ($row['catalogCitation'])
+                                {{ $row['catalogCitation'] }}
+                            @elseif ($row['result'] === 'no_catalog')
+                                {{ __('No catalog published for this course yet.') }}
+                            @else
+                                —
+                            @endif
+                        </span>
                         @if ($row['note'])
-                        <br>
                         <span class="status-badge {{ $row['note']['status'] === 'ratified' ? 'affinity-matched' : ($row['note']['status'] === 'expired' || $row['note']['status'] === 'rejected' ? 'affinity-not-matched' : 'affinity-technical-note') }}">
                             {{ __('Technical note') }}: {{ __(ucfirst(str_replace('_', ' ', $row['note']['status']))) }} ({{ $row['note']['deadline'] }})
                         </span>
@@ -87,6 +88,9 @@
 
     @if ($canPropose)
     <x-ui.modal :show="$showProposeModal" :title="__('Propose teacher for a group')">
+        <p style="color: var(--textSecondary); margin: 0;">
+            {{ __('Select a teacher and a course group to automatically verify their academic affinity.') }}
+        </p>
         <div class="form-field">
             <label for="assignmentTeacher">{{ __('Teacher') }}</label>
             <select id="assignmentTeacher" wire:model="proposeForm.teacherId" class="{{ $errors->has('proposeForm.teacherId') ? 'has-error' : '' }}">
@@ -125,6 +129,7 @@
         <div class="form-field">
             <label for="noteDeadline">{{ __('Ratification deadline') }}</label>
             <input type="date" id="noteDeadline" wire:model="noteForm.ratificationDeadline" class="{{ $errors->has('noteForm.ratificationDeadline') ? 'has-error' : '' }}">
+            <span style="font-size: 12.5px; color: var(--textMuted);">{{ __('An Administrator must ratify this assignment before the deadline.') }}</span>
             @error('noteForm.ratificationDeadline') <span class="form-error">{{ $message }}</span> @enderror
         </div>
         <x-slot:footer>
