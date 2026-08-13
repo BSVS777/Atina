@@ -755,3 +755,77 @@ the change composition/layout-only.
   unchanged assertions on rendered text used by `assertSee`), Pint, and
   direct diff review — not a real rendered screenshot. Flagged to the user
   as the one open risk in this change.
+
+---
+
+## 2026-08-13 — Sidebar toggle bug fix + global form-field border gap
+
+### AI consultation
+
+The user reported two problems after the first UX pass: (1) the "Docentes"
+sidebar group doesn't collapse when clicked again or when another nav group
+is opened, and (2) across forms in general, some fields render with a
+visible bordered box (text inputs) while others — noticed inside the
+Academic Affinity modals — render as plain unstyled text, with no visual
+cue that they're editable.
+
+### Accepted
+
+- **Sidebar toggle root cause**: the collapse chevron was nested inside
+  `<a href="..." wire:navigate>`. Livewire's `wire:navigate` click
+  interceptor is attached in the capture phase; Alpine's
+  `@click.stop.prevent` on the nested chevron runs in the bubble phase,
+  which fires *after* capture — so Livewire's listener already decided to
+  navigate before Alpine's handler could stop it. Every click on/near the
+  chevron re-navigated to the Teachers page and re-opened the group via the
+  route-sync logic, which looked like "it won't close." Root-cause fix:
+  moved the toggle into a sibling `<button>` outside the `<a>` (new
+  `.nav-parent-row`/`.nav-parent-link`/`.nav-parent-toggle` CSS, additive
+  only — `.nav-item`/`.nav-parent`/`.nav-children` untouched), so there is
+  no ancestor anchor for Livewire's interceptor to find.
+- **Accordion mutual exclusion**: introduced `Alpine.store('sidebarNav',
+  { openGroup: null })` (`resources/js/sidebar-nav.js`, registered via the
+  same `alpine:init` convention already used by `data-table.js`) so
+  Docentes/Groups/Reports share one "which group is open" value instead of
+  three independent local booleans — opening one now closes the others,
+  which is what "cierra al abrir otro nodo" asked for. Chose a store over
+  per-node local state specifically because the sidebar is `x-persist`ed
+  across `wire:navigate`, so there is no single common ancestor scope that
+  survives navigation for all three groups to read from.
+- **Global form-field border gap**: root cause was that
+  `.form-field input[type="text"], .form-field textarea` in `app.css` never
+  covered `select`, `input[type="date"]`, `input[type="file"]`, or
+  `input[type="number"]` — every screen using those types (Affinity
+  Catalog, Teacher Assignment, Academic Credentials, Teacher list's course
+  filter) silently fell back to unstyled browser-default controls next to
+  properly-boxed text inputs in the same form. Fixed once at the shared
+  selector (added the four missing types to the box, focus-glow, and
+  `.has-error` rules) instead of patching each view — same border-radius/
+  border-color/background tokens already used for text inputs, so every
+  form field across the whole app now gets the same rounded box uniformly,
+  with zero new colors or tokens.
+
+### Rejected
+
+- Keeping Groups' original "open by default on first load" quirk
+  (`x-data="{ open: true }"`) now that all three groups share one store —
+  it was an arbitrary leftover from placeholder scaffolding, not a real
+  requirement, and keeping it would have meant special-casing the shared
+  store's initial value for a non-functional section while Docentes (which
+  now has real routes) has no equivalent claim to default-open. All three
+  now default closed unless a real route match claims the store.
+
+### Learning
+
+- On this codebase's sidebar, any interactive control that must NOT trigger
+  `wire:navigate` cannot safely live inside an `<a wire:navigate>` even with
+  `.stop.prevent` — the fix has to be structural (sibling element), not
+  event-modifier based, because of the capture/bubble ordering between
+  Livewire's own listener and Alpine's.
+- A `.form-field` (or any shared form-wrapper class) selector list needs to
+  be audited against *every* input type actually used under it, not just
+  the ones present when the rule was first written — `type="text"` was the
+  only case covered originally (Role/Permission forms), and every module
+  added afterward with a different input type silently fell outside it with
+  no error, no lint signal, nothing but a visual inconsistency a human had
+  to notice by eye.

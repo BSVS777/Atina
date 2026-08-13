@@ -73,31 +73,38 @@
 
             <div
                 x-data="{
-                    open: false,
                     groupActive: false,
                     syncTeacherGroup() {
                         const path = window.location.pathname;
                         const routes = ['{{ route('academic.teacher.index') }}', '{{ route('academic.affinity-catalog.index') }}', '{{ route('academic.teacher-assignment.index') }}'];
                         this.groupActive = routes.some((url) => path === new URL(url).pathname);
-                        this.open = this.groupActive;
+                        if (this.groupActive) {
+                            $store.sidebarNav.openGroup = 'docentes';
+                        } else if ($store.sidebarNav.openGroup === 'docentes') {
+                            $store.sidebarNav.openGroup = null;
+                        }
                     },
                 }"
                 x-init="syncTeacherGroup()"
                 x-on:livewire:navigated.window="syncTeacherGroup()"
             >
-                <a href="{{ route('academic.teacher.index') }}" wire:navigate class="nav-item nav-parent" :class="{ active: groupActive }">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="10" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                    <span class="nav-text" data-labels>{{ __('Teachers') }}</span>
-                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" @click.stop.prevent="open = !open">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                </a>
-                <div class="nav-children" :class="{ 'open': open }" data-labels>
+                <div class="nav-item nav-parent-row" :class="{ active: groupActive }">
+                    <a href="{{ route('academic.teacher.index') }}" wire:navigate class="nav-parent-link">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="10" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <span class="nav-text" data-labels>{{ __('Teachers') }}</span>
+                    </a>
+                    <button type="button" class="nav-parent-toggle" data-labels aria-label="{{ __('Expand/collapse menu') }}" :aria-expanded="($store.sidebarNav.openGroup === 'docentes').toString()" @click="$store.sidebarNav.openGroup = ($store.sidebarNav.openGroup === 'docentes' ? null : 'docentes')">
+                        <svg class="nav-chevron chevron-toggle" :class="{ 'open': $store.sidebarNav.openGroup === 'docentes' }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                </div>
+                <div class="nav-children" :class="{ 'open': $store.sidebarNav.openGroup === 'docentes' }" data-labels>
                     @can('create', \Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion::class)
                     <a href="{{ route('academic.affinity-catalog.index') }}" wire:navigate wire:current="active" class="nav-child">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -136,19 +143,19 @@
                 </svg>
             </a>
 
-            <div x-data="{ open: true }" x-on:livewire:navigated.window="open = false">
-                <div class="nav-item nav-parent" @click="open = !open; setSection('grupos', currentSub || 'activos')">
+            <div x-on:livewire:navigated.window="if ($store.sidebarNav.openGroup === 'grupos') { $store.sidebarNav.openGroup = null; }">
+                <div class="nav-item nav-parent" @click="$store.sidebarNav.openGroup = ($store.sidebarNav.openGroup === 'grupos' ? null : 'grupos'); setSection('grupos', currentSub || 'activos')">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                         <polyline points="2 17 12 22 22 17"></polyline>
                         <polyline points="2 12 12 17 22 12"></polyline>
                     </svg>
                     <span class="nav-text" data-labels>{{ __('Groups') }}</span>
-                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': $store.sidebarNav.openGroup === 'grupos' }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                 </div>
-                <div class="nav-children" :class="{ 'open': open }" data-labels>
+                <div class="nav-children" :class="{ 'open': $store.sidebarNav.openGroup === 'grupos' }" data-labels>
                     <a href="#" class="nav-child" @click.prevent="setSection('grupos', 'activos')">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                             <polyline points="9 6 15 12 9 18"></polyline>
@@ -180,8 +187,8 @@
                 </svg>
             </a>
 
-            <div x-data="{ open: false }" x-on:livewire:navigated.window="open = false">
-                <div class="nav-item nav-parent" @click="open = !open; setSection('reportes', currentSub || 'reporte1')">
+            <div x-on:livewire:navigated.window="if ($store.sidebarNav.openGroup === 'reportes') { $store.sidebarNav.openGroup = null; }">
+                <div class="nav-item nav-parent" @click="$store.sidebarNav.openGroup = ($store.sidebarNav.openGroup === 'reportes' ? null : 'reportes'); setSection('reportes', currentSub || 'reporte1')">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                         <polyline points="14 2 14 8 20 8"></polyline>
@@ -189,11 +196,11 @@
                         <line x1="8" y1="17" x2="12" y2="17"></line>
                     </svg>
                     <span class="nav-text" data-labels>{{ __('Reports') }}</span>
-                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': open }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="nav-chevron chevron-toggle" :class="{ 'open': $store.sidebarNav.openGroup === 'reportes' }" data-labels width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                 </div>
-                <div class="nav-children" :class="{ 'open': open }" data-labels>
+                <div class="nav-children" :class="{ 'open': $store.sidebarNav.openGroup === 'reportes' }" data-labels>
                     <a href="#" class="nav-child" @click.prevent="setSection('reportes', 'reporte1')">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                             <polyline points="9 6 15 12 9 18"></polyline>
