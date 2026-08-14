@@ -23,3 +23,10 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# AI tooling config (harness, skills, agents) — not project code
+/.agents
+/.ai-harness
+/.atl
+/.claude
+/skills-lock.json
