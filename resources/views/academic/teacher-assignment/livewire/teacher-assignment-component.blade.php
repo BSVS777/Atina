@@ -140,30 +140,34 @@
                     progress: 0,
                     invalid: false,
                     uploadFailed: false,
-                    accept(list) {
+                    handleFiles(list) {
                         if (! list || list.length === 0) return;
                         const file = list[0];
                         this.invalid = file.type !== 'application/pdf';
                         this.uploadFailed = false;
-                        if (this.invalid) { this.fileName = ''; return; }
+                        this.fileName = this.invalid ? '' : file.name;
+                    },
+                    acceptDrop(list) {
+                        if (! list || list.length === 0) return;
                         this.$refs.input.files = list;
-                        this.fileName = file.name;
+                        this.handleFiles(list);
                         this.$refs.input.dispatchEvent(new Event('change', { bubbles: true }));
                     },
                 }"
                 :class="{ 'is-dragging': dragging, 'has-file': fileName !== '' }"
                 x-on:dragover.prevent="dragging = true"
                 x-on:dragleave.prevent="dragging = false"
-                x-on:drop.prevent="dragging = false; accept($event.dataTransfer.files)"
+                x-on:drop.prevent="dragging = false; acceptDrop($event.dataTransfer.files)"
                 x-on:click="$refs.input.click()"
                 x-on:livewire-upload-start="uploading = true; progress = 0; uploadFailed = false"
                 x-on:livewire-upload-finish="uploading = false; progress = 100"
                 x-on:livewire-upload-error="uploading = false; fileName = ''; uploadFailed = true"
                 x-on:livewire-upload-progress="progress = $event.detail.progress">
 
+                {{-- handleFiles() must stay dispatch-free: wiring it to call acceptDrop() instead would recurse forever on its own synthesized 'change' event. --}}
                 <input type="file" id="noteDocument" x-ref="input" class="dropzone-input"
                     wire:model="noteForm.document" accept="application/pdf"
-                    x-on:change="accept($event.target.files)">
+                    x-on:change="handleFiles($event.target.files)">
 
                 <svg class="dropzone-icon" width="34" height="34" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
