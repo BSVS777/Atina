@@ -768,6 +768,7 @@ select:focus[data-flux-control] {
   .data-row {
     display: grid;
     grid-template-columns: var(--table-cols, 1fr);
+    column-gap: 20px;
     padding: 13px 20px;
     align-items: center;
     font-size: 13.5px;
@@ -777,6 +778,7 @@ select:focus[data-flux-control] {
   .data-row-head {
     display: grid;
     grid-template-columns: var(--table-cols, 1fr);
+    column-gap: 20px;
     background: var(--tableHeadBg);
     font-size: 11.5px;
     font-weight: 700;
