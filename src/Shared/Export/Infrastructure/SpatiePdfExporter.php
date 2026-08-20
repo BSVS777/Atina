@@ -64,16 +64,32 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Fonts network call either, see table-pdf.blade.php), this removes
  * every network-dependent variable from render time — what's left is
  * just Chrome's own startup + layout, which is fast and consistent.
+ *
+ * ->setCustomTempPath(storage_path('app/browsershot')) overrides Browsershot's
+ * default of sys_get_temp_dir() (spatie/temporary-directory), where it
+ * writes the intermediate HTML/options files it hands to the Chrome
+ * child process. On Windows, the PHP process (run as a service/app-pool
+ * identity) can lack write access to that user-scoped OS temp folder —
+ * that's the `mkdir(): Permission denied` at TemporaryDirectory.php:50.
+ * storage/app is guaranteed writable already (Laravel itself depends on
+ * it), so pointing Browsershot there sidesteps the OS temp dir entirely.
  */
 final class SpatiePdfExporter implements PdfExporterInterface
 {
     public function fromHtml(string $html, string $filename, string $paperSize = 'a4'): StreamedResponse
     {
+        $tempPath = storage_path('app/browsershot');
+
+        if (! is_dir($tempPath)) {
+            mkdir($tempPath, 0755, true);
+        }
+
         $pdfBytes = Pdf::html($html)
             ->format($paperSize)
-            ->withBrowsershot(function (Browsershot $browsershot): void {
+            ->withBrowsershot(function (Browsershot $browsershot) use ($tempPath): void {
                 $browsershot
                     ->setNodeModulePath(base_path('node_modules'))
+                    ->setCustomTempPath($tempPath)
                     ->timeout(15)
                     ->showBackground()
                     ->addChromiumArguments([
