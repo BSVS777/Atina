@@ -139,10 +139,12 @@
                     uploading: false,
                     progress: 0,
                     invalid: false,
+                    uploadFailed: false,
                     accept(list) {
                         if (! list || list.length === 0) return;
                         const file = list[0];
                         this.invalid = file.type !== 'application/pdf';
+                        this.uploadFailed = false;
                         if (this.invalid) { this.fileName = ''; return; }
                         this.$refs.input.files = list;
                         this.fileName = file.name;
@@ -154,9 +156,9 @@
                 x-on:dragleave.prevent="dragging = false"
                 x-on:drop.prevent="dragging = false; accept($event.dataTransfer.files)"
                 x-on:click="$refs.input.click()"
-                x-on:livewire-upload-start="uploading = true; progress = 0"
+                x-on:livewire-upload-start="uploading = true; progress = 0; uploadFailed = false"
                 x-on:livewire-upload-finish="uploading = false; progress = 100"
-                x-on:livewire-upload-error="uploading = false; fileName = ''"
+                x-on:livewire-upload-error="uploading = false; fileName = ''; uploadFailed = true"
                 x-on:livewire-upload-progress="progress = $event.detail.progress">
 
                 <input type="file" id="noteDocument" x-ref="input" class="dropzone-input"
@@ -189,6 +191,7 @@
                 </div>
 
                 <span class="form-error" x-show="invalid" x-cloak>{{ __('Only PDF files are accepted.') }}</span>
+                <span class="form-error" x-show="uploadFailed" x-cloak>{{ __('The upload failed. Check the file size and try again.') }}</span>
             </div>
 
             @error('noteForm.document') <span class="form-error">{{ $message }}</span> @enderror
