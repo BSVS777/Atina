@@ -1039,6 +1039,119 @@ select:focus[data-flux-control] {
     font-size: 12.5px;
     color: var(--logout);
   }
+  /* Filter box that sits INSIDE a modal section but outside .form-field
+     (no <label> of its own) -- e.g. the specialty search in the affinity
+     catalog modal. Without this it inherits nothing and renders as a bare
+     unstyled input: no border, no padding, no radius. Matches
+     .form-field input so the two read as the same control. */
+  .list-filter-input {
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--cardBg);
+    color: var(--textPrimary);
+    font-size: 13.5px;
+    font-family: inherit;
+  }
+  .list-filter-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(11, 60, 140, 0.12);
+  }
+  .list-filter-input::placeholder {
+    color: var(--textMuted);
+  }
+
+  /* Drag & drop upload area. The real <input type="file"> stays in the
+     DOM (opacity 0, zero box) rather than display:none, because Livewire
+     uploads directly from that element and a display:none input cannot be
+     opened by .click() in some browsers. */
+  .dropzone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 26px 18px;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    background: var(--cardBg);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .dropzone:hover {
+    border-color: var(--primary);
+  }
+  .dropzone.is-dragging {
+    border-color: var(--primary);
+    background: rgba(11, 60, 140, 0.06);
+  }
+  .dropzone.has-file {
+    border-style: solid;
+    border-color: var(--primary);
+  }
+  .dropzone.has-error {
+    border-color: var(--logout);
+  }
+  .dropzone-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .dropzone-icon {
+    color: var(--textMuted);
+    pointer-events: none;
+  }
+  .dropzone.has-file .dropzone-icon,
+  .dropzone.is-dragging .dropzone-icon {
+    color: var(--primary);
+  }
+  .dropzone-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 13.5px;
+    color: var(--textSecondary);
+    pointer-events: none;
+  }
+  .dropzone-text strong {
+    color: var(--textPrimary);
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .dropzone-file {
+    font-weight: 700;
+    color: var(--primary);
+    word-break: break-all;
+  }
+  .dropzone-hint {
+    font-size: 12px;
+    color: var(--textMuted);
+  }
+  .dropzone-progress {
+    width: 100%;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--border);
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .dropzone-bar {
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.2s ease;
+  }
+  [x-cloak] {
+    display: none !important;
+  }
+
   .permissions-list {
     margin-top: 10px;
     border: 1px solid var(--border);

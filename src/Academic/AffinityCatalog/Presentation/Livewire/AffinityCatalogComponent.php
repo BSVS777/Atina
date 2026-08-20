@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Academic\AffinityCatalog\Presentation\Livewire;
 
+use App\Livewire\Concerns\InteractsWithDataTable;
 use App\Models\Course;
 use App\Models\Specialty;
 use Illuminate\Contracts\View\View;
@@ -24,6 +25,29 @@ use Src\Academic\AffinityCatalog\Presentation\Livewire\Forms\AffinityCatalogVers
 class AffinityCatalogComponent extends Component
 {
     use AuthorizesRequests;
+    use InteractsWithDataTable;
+
+    /**
+     * Row keys the search box matches against. Deliberately excludes
+     * 'id' (an internal surrogate the user never sees) and
+     * 'effectiveEndDate' (null on the version currently in force, so
+     * searching it would silently drop exactly the row that matters most).
+     */
+    private const SEARCHABLE = [
+        'version',
+        'councilAgreement',
+        'gazetteNumber',
+        'effectiveStartDate',
+        'specialties',
+    ];
+
+    /**
+     * 'server' rather than 'client': these rows come from an Application
+     * UseCase returning Domain entities mapped to arrays, not an Eloquent
+     * collection, and each row carries the full comma-separated specialty
+     * list. Filtering server-side keeps that payload off every render.
+     */
+    protected string $tableMode = 'server';
 
     public ?int $selectedCourseId = null;
 
@@ -34,6 +58,16 @@ class AffinityCatalogComponent extends Component
     public function mount(): void
     {
         $this->selectedCourseId = Course::query()->orderBy('nombre')->value('id');
+    }
+
+    /**
+     * Switching course replaces the whole result set, so page and search
+     * state carried over from the previous course is meaningless.
+     */
+    public function updatedSelectedCourseId(): void
+    {
+        $this->page = 1;
+        $this->search = '';
     }
 
     public function openCreateModal(): void
@@ -85,7 +119,8 @@ class AffinityCatalogComponent extends Component
         return view('academic.affinity-catalog.livewire.affinity-catalog-component', [
             'courses' => $courses,
             'specialties' => $specialties,
-            'rows' => $rows,
+            'tableMode' => $this->tableMode(),
+            'versions' => $this->paginateRows($rows, self::SEARCHABLE),
             'canManage' => auth()->user()->can('create', AffinityCatalogVersion::class),
             'selectedCourse' => $courses->firstWhere('id', $this->selectedCourseId),
         ])->layout('components.layouts.dashboard', [

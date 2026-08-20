@@ -1,6 +1,7 @@
 @props([
 'show' => false,
 'title' => '',
+'closeAction' => 'closeModal',
 ])
 
 {{--
@@ -9,12 +10,22 @@
     (form fields) and footer (action buttons) differ per module; the
     backdrop/header/close-button markup and classes are ported 1:1 from
     the approved design so every future modal looks identical.
+
+    closeAction: the Livewire method the X button calls. Defaults to
+    'closeModal' because that is what every single-modal component
+    exposes (RoleComponent, PermissionComponent, TeacherProfileComponent,
+    AffinityCatalogComponent). A component owning MORE THAN ONE modal
+    cannot have a single closeModal() -- TeacherAssignmentComponent has
+    closeProposeModal() and closeNoteModal() -- so those views MUST pass
+    :close-action explicitly. Leaving the method name hardcoded here is
+    what made both of those X buttons throw MethodNotFoundException at
+    runtime: Blade cannot catch a missing Livewire method at compile time.
 --}}
 <div class="modal-backdrop {{ $show ? 'open' : '' }}">
     <div class="modal">
         <div class="modal-head">
             <span class="modal-title">{{ $title }}</span>
-            <button type="button" class="modal-close" wire:click="closeModal" aria-label="{{ __('Close') }}">
+            <button type="button" class="modal-close" wire:click="{{ $closeAction }}" aria-label="{{ __('Close') }}">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>

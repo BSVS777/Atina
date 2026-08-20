@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Concerns;
 
+use Illuminate\Pagination\LengthAwarePaginator;
 use Livewire\Attributes\Url;
 
 /**
@@ -136,5 +137,65 @@ trait InteractsWithDataTable
         if ($this->isClientMode()) {
             $this->dispatch('data-table-refresh', rows: $rows);
         }
+    }
+
+    /**
+     * Server-mode helper for Application layers that hand back a plain
+     * array of row arrays instead of an Eloquent query — which is every
+     * UseCase under src/, by design: the Domain never leaks a query
+     * Builder into Presentation. Applies this component's current
+     * $search / $sortKey / $sortDir / $perPage / $page to the already
+     * materialised rows and wraps the slice in the LengthAwarePaginator
+     * that <x-ui.data-table> expects on its 'server' branch.
+     *
+     * Components backed directly by Eloquent (TeacherComponent,
+     * RoleComponent...) keep their own query->paginate() and never call
+     * this.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  array<int, string>  $searchable  row keys the search box matches against
+     * @return LengthAwarePaginator<int, array<string, mixed>>
+     */
+    public function paginateRows(array $rows, array $searchable): LengthAwarePaginator
+    {
+        if ($this->search !== '' && $searchable !== []) {
+            $term = mb_strtolower(trim($this->search));
+
+            $rows = array_values(array_filter($rows, function (array $row) use ($searchable, $term): bool {
+                foreach ($searchable as $key) {
+                    if (str_contains(mb_strtolower((string) ($row[$key] ?? '')), $term)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }));
+        }
+
+        if ($this->sortKey !== '') {
+            $key = $this->sortKey;
+            $direction = $this->sortDir === 'desc' ? -1 : 1;
+
+            usort($rows, fn (array $a, array $b): int => $direction * strnatcasecmp(
+                (string) ($a[$key] ?? ''),
+                (string) ($b[$key] ?? ''),
+            ));
+        }
+
+        $total = count($rows);
+        $lastPage = max(1, (int) ceil($total / $this->perPage));
+
+        // Filtering can shrink the result set below the page the user was
+        // standing on (searching while on page 4 of 5). Clamping keeps the
+        // footer summary and the pager buttons consistent instead of
+        // rendering an empty page with no way back.
+        $this->page = min(max(1, $this->page), $lastPage);
+
+        return new LengthAwarePaginator(
+            array_slice($rows, ($this->page - 1) * $this->perPage, $this->perPage),
+            $total,
+            $this->perPage,
+            $this->page,
+        );
     }
 }

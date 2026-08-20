@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Academic\TeacherAssignment\Presentation\Livewire;
 
+use App\Livewire\Concerns\InteractsWithDataTable;
 use App\Models\AffinityCatalogVersion;
 use App\Models\CourseGroup;
 use App\Models\Teacher;
@@ -35,7 +36,24 @@ use Src\Academic\TeacherAssignment\Presentation\Livewire\Forms\TechnicalNoteForm
 class TeacherAssignmentComponent extends Component
 {
     use AuthorizesRequests;
+    use InteractsWithDataTable;
     use WithFileUploads;
+
+    /**
+     * All four are already human-readable strings by the time toRow() is
+     * done ('teacher' and 'group' are resolved labels, not ids) -- which
+     * is exactly why the search runs over the row array and not over the
+     * query: the Coordinadora searches for "Arce Araya" or "no_catalog",
+     * never for teacher_id 17.
+     */
+    private const SEARCHABLE = ['teacher', 'group', 'status', 'result'];
+
+    /**
+     * 'server': the assignment list grows with every proposal made in a
+     * term, so it must not be shipped whole to the browser on each render
+     * the way the small reference tables (roles, permissions) are.
+     */
+    protected string $tableMode = 'server';
 
     public bool $showProposeModal = false;
 
@@ -150,8 +168,14 @@ class TeacherAssignmentComponent extends Component
             fn (AffinityCatalogVersion $version) => [$version->id => "v{$version->version} — {$version->acuerdo} / Gaceta {$version->numero_gaceta}"]
         );
 
+        $rows = array_map(
+            fn (AssignmentOverview $overview) => $this->toRow($overview, $teacherNames, $groupLabels, $catalogCitations),
+            $overviews,
+        );
+
         return view('academic.teacher-assignment.livewire.teacher-assignment-component', [
-            'rows' => array_map(fn (AssignmentOverview $overview) => $this->toRow($overview, $teacherNames, $groupLabels, $catalogCitations), $overviews),
+            'tableMode' => $this->tableMode(),
+            'assignments' => $this->paginateRows($rows, self::SEARCHABLE),
             'teachers' => $teachers,
             'groups' => $groups,
             'canPropose' => auth()->user()->can('create', TeacherAssignment::class),

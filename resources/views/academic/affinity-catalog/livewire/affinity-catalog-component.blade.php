@@ -10,53 +10,46 @@
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-head">
-            <div>
-                <span class="card-title">{{ __('Catalog versions') }}</span>
-                @if ($selectedCourse)
-                <div style="font-size:12.5px; color:var(--textMuted); margin-top:2px;">{{ $selectedCourse->code }} — {{ $selectedCourse->name }}</div>
-                @endif
-            </div>
-            @if ($canManage)
-            <div class="card-actions">
-                <button type="button" class="btn btn-orange" wire:click="openCreateModal">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    <span>{{ __('New version') }}</span>
-                </button>
-            </div>
+    <x-ui.data-table
+        :headers="[
+            ['key' => 'version', 'label' => __('Version'), 'sortable' => true],
+            ['key' => 'councilAgreement', 'label' => __('Council agreement'), 'sortable' => true],
+            ['key' => 'gazetteNumber', 'label' => __('Gazette number'), 'sortable' => false],
+            ['key' => 'effectiveStartDate', 'label' => __('Effective from'), 'sortable' => true],
+            ['key' => 'effectiveEndDate', 'label' => __('Effective until'), 'sortable' => false],
+            ['key' => 'specialties', 'label' => __('Affine specialties'), 'sortable' => false],
+        ]"
+        :mode="$tableMode"
+        :paginator="$versions"
+        :searchable="['version', 'councilAgreement', 'gazetteNumber', 'effectiveStartDate', 'specialties']"
+        :sort-key="$sortKey"
+        :sort-dir="$sortDir"
+        :per-page="$perPage"
+        table-cols="0.6fr 1.4fr 1fr 1.2fr 1.2fr 2.6fr 0.6fr"
+        :can-create="$canManage"
+        :create-label="__('New version')"
+        :title="$selectedCourse ? $selectedCourse->code . ' — ' . $selectedCourse->name : __('Catalog versions')">
+
+        @forelse ($versions as $row)
+        <div class="data-row" role="row" wire:key="catalog-version-{{ $row['id'] }}">
+            <span><span class="status-badge">{{ __('v:number', ['number' => $row['version']]) }}</span></span>
+            <span>{{ $row['councilAgreement'] }}</span>
+            <span>{{ $row['gazetteNumber'] }}</span>
+            <span>{{ $row['effectiveStartDate'] }}</span>
+            <span>{{ $row['effectiveEndDate'] ?? __('Indefinite') }}</span>
+            <span>{{ $row['specialties'] }}</span>
+            <div class="actions-cell"></div>
+        </div>
+        @empty
+        <div class="empty-row">
+            @if ($search !== '')
+            {{ __('No records found') }}
+            @else
+            {{ __('This course has no affinity catalog published yet — verifications will be flagged "No catalog".') }}
             @endif
         </div>
-
-        <div class="table-scroll">
-            <div class="table-inner" style="--table-cols: 0.6fr 1.4fr 1fr 1.2fr 1.2fr 2.6fr;" role="table">
-                <div class="data-row data-row-head" role="row">
-                    <span role="columnheader">{{ __('Version') }}</span>
-                    <span role="columnheader">{{ __('Council agreement') }}</span>
-                    <span role="columnheader">{{ __('Gazette number') }}</span>
-                    <span role="columnheader">{{ __('Effective from') }}</span>
-                    <span role="columnheader">{{ __('Effective until') }}</span>
-                    <span role="columnheader">{{ __('Affine specialties') }}</span>
-                </div>
-
-                @forelse ($rows as $row)
-                <div class="data-row" role="row" wire:key="catalog-version-{{ $row['id'] }}">
-                    <span><span class="status-badge">{{ __('v:number', ['number' => $row['version']]) }}</span></span>
-                    <span>{{ $row['councilAgreement'] }}</span>
-                    <span>{{ $row['gazetteNumber'] }}</span>
-                    <span>{{ $row['effectiveStartDate'] }}</span>
-                    <span>{{ $row['effectiveEndDate'] ?? __('Indefinite') }}</span>
-                    <span>{{ $row['specialties'] }}</span>
-                </div>
-                @empty
-                <div class="empty-row">{{ __('This course has no affinity catalog published yet — verifications will be flagged "No catalog".') }}</div>
-                @endforelse
-            </div>
-        </div>
-    </div>
+        @endforelse
+    </x-ui.data-table>
 
     @if ($canManage)
     <x-ui.modal :show="$showModal" :title="__('New catalog version')">
@@ -108,7 +101,7 @@
         }">
             <span class="control-group" style="margin-bottom:10px;">{{ __('Affine specialties') }}</span>
             @if ($specialties->count() > 8)
-            <input type="text" x-model.debounce.100ms="specialtySearch" placeholder="{{ __('Search specialty...') }}" style="margin-bottom:10px;">
+            <input type="text" class="list-filter-input" x-model.debounce.100ms="specialtySearch" placeholder="{{ __('Search specialty...') }}">
             @endif
             <div class="permissions-list">
                 @forelse ($specialties as $specialty)
