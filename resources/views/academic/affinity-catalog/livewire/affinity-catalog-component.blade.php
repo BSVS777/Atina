@@ -40,7 +40,11 @@
             <span>{{ $row['effectiveStartDate'] }}</span>
             <span>{{ $row['effectiveEndDate'] ?? __('Indefinite') }}</span>
             <span>{{ $row['specialties'] }}</span>
-            <div class="actions-cell"></div>
+            <div class="actions-cell">
+                <x-ui.row-actions
+                    :can-edit="$canManage && $row['canEdit']"
+                    edit-action="$wire.openEditModal({{ $row['id'] }})" />
+            </div>
         </div>
         @empty
         <div class="empty-row">
@@ -54,10 +58,10 @@
     </x-ui.data-table>
 
     @if ($canManage)
-    <x-ui.modal :show="$showModal" :title="__('New catalog version')">
+    <x-ui.modal :show="$showModal" :title="$editingId === null ? __('New catalog version') : __('Edit catalog version')">
         <div class="form-field">
             <label for="catalogVersionCourse">{{ __('Course') }}</label>
-            <select id="catalogVersionCourse" wire:model="form.courseId" class="{{ $errors->has('form.courseId') ? 'has-error' : '' }}">
+            <select id="catalogVersionCourse" wire:model="form.courseId" class="{{ $errors->has('form.courseId') ? 'has-error' : '' }}" @disabled($editingId !== null)>
                 @foreach ($courses as $course)
                 <option value="{{ $course->id }}">{{ $course->code }} — {{ $course->name }}</option>
                 @endforeach

@@ -82,6 +82,15 @@ class TeacherAssignmentAuthorizationTest extends TestCase
         $this->assertTrue($withPermission->can('create', AffinityCatalogVersion::class));
     }
 
+    public function test_editing_a_catalog_version_requires_catalogo_gestionar(): void
+    {
+        $withoutPermission = $this->userWithPermission('atinencia.verificar');
+        $this->assertFalse($withoutPermission->can('update', AffinityCatalogVersion::class));
+
+        $withPermission = $this->userWithPermission('catalogo.gestionar');
+        $this->assertTrue($withPermission->can('update', AffinityCatalogVersion::class));
+    }
+
     public function test_deciding_a_no_catalog_assignment_requires_atinencia_verificar(): void
     {
         $withoutPermission = User::factory()->create();

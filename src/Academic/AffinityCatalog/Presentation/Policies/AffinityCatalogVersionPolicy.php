@@ -12,12 +12,19 @@ use App\Models\User;
  * "Administrador" in the professor-provided database — see
  * Docs/DIARIO_DECISIONES_IA.md. Superadmin bypasses via Gate::before.
  *
- * No update/delete method: every change is a brand new version (DO-02),
- * never a mutation of an existing one.
+ * No delete method: prior versions are never removed (DO-02). `update`
+ * exists only for correcting a version before it's ever cited by a
+ * verification — UpdateAffinityCatalogVersionUseCase enforces that part
+ * of the rule (this policy only gates the permission, not that state).
  */
 class AffinityCatalogVersionPolicy
 {
     public function create(User $user): bool
+    {
+        return $user->hasPermissionTo('catalogo.gestionar');
+    }
+
+    public function update(User $user): bool
     {
         return $user->hasPermissionTo('catalogo.gestionar');
     }

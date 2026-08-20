@@ -9,8 +9,12 @@ use InvalidArgumentException;
 
 /**
  * One versioned entry of the affinity catalog for a course (DO-02).
- * Immutable by design: an "update" always creates a new version with a
- * new id — this class never mutates an already-persisted version.
+ * Immutable *value object*: this class itself never mutates in place,
+ * every setter-like operation returns a new instance (see `withId()`).
+ * That is separate from whether the underlying persisted row can be
+ * updated — CreateAffinityCatalogVersionUseCase always inserts a new
+ * row, while UpdateAffinityCatalogVersionUseCase may update an existing
+ * row in place, but only while `hasVerifications()` is still false.
  */
 final class AffinityCatalogVersion
 {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Src\Academic\AffinityCatalog\Infrastructure\Persistence\Repositories;
 
 use App\Models\AffinityCatalogVersion as AffinityCatalogVersionModel;
+use App\Models\AffinityVerification as AffinityVerificationModel;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Src\Academic\AffinityCatalog\Domain\Contracts\AffinityCatalogVersionRepositoryInterface;
@@ -61,6 +62,11 @@ final class EloquentAffinityCatalogVersionRepository implements AffinityCatalogV
         $model->especialidadesAtinentes()->sync($version->specialtyIds());
 
         return $this->toDomain($model->load('especialidadesAtinentes'));
+    }
+
+    public function hasVerifications(int $catalogVersionId): bool
+    {
+        return AffinityVerificationModel::query()->where('catalogo_atinencia_id', $catalogVersionId)->exists();
     }
 
     private function toDomain(AffinityCatalogVersionModel $model): AffinityCatalogVersion

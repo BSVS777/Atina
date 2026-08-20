@@ -6,6 +6,7 @@ namespace Src\Academic\AffinityCatalog\Presentation\Livewire\Forms;
 
 use Livewire\Form;
 use Src\Academic\AffinityCatalog\Application\DTOs\AffinityCatalogVersionDTO;
+use Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion;
 
 class AffinityCatalogVersionForm extends Form
 {
@@ -36,6 +37,16 @@ class AffinityCatalogVersionForm extends Form
             'specialtyIds' => ['required', 'array', 'min:1'],
             'specialtyIds.*' => ['integer', 'exists:especialidades,id'],
         ];
+    }
+
+    public function fromEntity(AffinityCatalogVersion $version): void
+    {
+        $this->courseId = $version->courseId();
+        $this->councilAgreement = $version->councilAgreement();
+        $this->gazetteNumber = $version->gazetteNumber();
+        $this->effectiveStartDate = $version->effectiveStartDate()->format('Y-m-d');
+        $this->effectiveEndDate = $version->effectiveEndDate()?->format('Y-m-d');
+        $this->specialtyIds = $version->specialtyIds();
     }
 
     public function toDto(): AffinityCatalogVersionDTO

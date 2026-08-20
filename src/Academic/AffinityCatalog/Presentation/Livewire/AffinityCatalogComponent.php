@@ -15,7 +15,11 @@ use Illuminate\Support\Str;
 use Livewire\Component;
 use Src\Academic\AffinityCatalog\Application\UseCases\CreateAffinityCatalogVersionUseCase;
 use Src\Academic\AffinityCatalog\Application\UseCases\ListAffinityCatalogVersionsForCourseUseCase;
+use Src\Academic\AffinityCatalog\Application\UseCases\UpdateAffinityCatalogVersionUseCase;
+use Src\Academic\AffinityCatalog\Domain\Contracts\AffinityCatalogVersionRepositoryInterface;
 use Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion;
+use Src\Academic\AffinityCatalog\Domain\Exceptions\CatalogVersionInUseException;
+use Src\Academic\AffinityCatalog\Domain\Exceptions\CatalogVersionNotFoundException;
 use Src\Academic\AffinityCatalog\Domain\Exceptions\OverlappingCatalogVersionException;
 use Src\Academic\AffinityCatalog\Presentation\Livewire\Forms\AffinityCatalogVersionForm;
 use Src\Shared\Export\Contracts\ExcelExporterInterface;
@@ -24,8 +28,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * DO-02: lists the versioned catalog for a selected course and lets the
- * Administrador publish a new version. There is no edit/delete — every
- * change is a brand new version (see AffinityCatalogVersionPolicy).
+ * Administrador publish a new version. No delete, ever — prior versions
+ * stay. Editing an existing version is offered only while it has zero
+ * verifications recorded against it (see UpdateAffinityCatalogVersionUseCase);
+ * once cited, correcting a mistake means publishing a new version instead.
  */
 class AffinityCatalogComponent extends Component
 {
@@ -59,6 +65,13 @@ class AffinityCatalogComponent extends Component
 
     public bool $showModal = false;
 
+    /**
+     * Null while creating; the row's id while editing. Editing is only
+     * ever offered for a version that has zero verifications recorded
+     * against it yet — see UpdateAffinityCatalogVersionUseCase.
+     */
+    public ?int $editingId = null;
+
     public AffinityCatalogVersionForm $form;
 
     public function mount(): void
@@ -80,8 +93,27 @@ class AffinityCatalogComponent extends Component
     {
         $this->authorize('create', AffinityCatalogVersion::class);
 
+        $this->editingId = null;
         $this->form->reset();
         $this->form->courseId = $this->selectedCourseId;
+        $this->resetValidation();
+        $this->showModal = true;
+    }
+
+    public function openEditModal(int $id, AffinityCatalogVersionRepositoryInterface $repository): void
+    {
+        $this->authorize('update', AffinityCatalogVersion::class);
+
+        $version = $repository->find($id) ?? throw CatalogVersionNotFoundException::withId($id);
+
+        if ($repository->hasVerifications($id)) {
+            $this->dispatch('toast', variant: 'danger', text: __('This version already has verifications recorded and can no longer be edited — publish a new version instead.'));
+
+            return;
+        }
+
+        $this->editingId = $id;
+        $this->form->fromEntity($version);
         $this->resetValidation();
         $this->showModal = true;
     }
@@ -91,56 +123,65 @@ class AffinityCatalogComponent extends Component
         $this->showModal = false;
     }
 
-    public function save(CreateAffinityCatalogVersionUseCase $useCase): void
+    public function save(CreateAffinityCatalogVersionUseCase $createUseCase, UpdateAffinityCatalogVersionUseCase $updateUseCase): void
     {
-        $this->authorize('create', AffinityCatalogVersion::class);
+        $this->authorize($this->editingId === null ? 'create' : 'update', AffinityCatalogVersion::class);
         $this->form->validate();
 
         try {
-            $version = $useCase->handle($this->form->toDto(), auth()->user()?->id);
+            $version = $this->editingId === null
+                ? $createUseCase->handle($this->form->toDto(), auth()->user()?->id)
+                : $updateUseCase->handle($this->editingId, $this->form->toDto(), auth()->user()?->id);
         } catch (OverlappingCatalogVersionException $e) {
             $this->addError('form.effectiveStartDate', $e->getMessage());
+
+            return;
+        } catch (CatalogVersionInUseException) {
+            $this->showModal = false;
+            $this->dispatch('toast', variant: 'danger', text: __('This version already has verifications recorded and can no longer be edited — publish a new version instead.'));
 
             return;
         }
 
         $this->selectedCourseId = $version->courseId();
         $this->showModal = false;
-        $this->dispatch('toast', variant: 'success', text: __('Affinity catalog version published.'));
+        $this->dispatch('toast', variant: 'success', text: $this->editingId === null
+            ? __('Affinity catalog version published.')
+            : __('Affinity catalog version updated.'));
     }
 
-    public function exportPdf(PdfExporterInterface $exporter, ListAffinityCatalogVersionsForCourseUseCase $useCase, ?string $search = null): StreamedResponse
+    public function exportPdf(PdfExporterInterface $exporter, ListAffinityCatalogVersionsForCourseUseCase $useCase, AffinityCatalogVersionRepositoryInterface $repository, ?string $search = null): StreamedResponse
     {
         $this->authorize('exportPdf', AffinityCatalogVersion::class);
 
         return $this->streamPdf(
             __('Affinity Catalog'),
             $this->exportHeaders(),
-            $this->exportableRows($useCase, $search),
+            $this->exportableRows($useCase, $repository, $search),
             Str::slug(__('Affinity Catalog')).'.pdf',
             $exporter,
             paperSize: 'letter',
         );
     }
 
-    public function exportExcel(ExcelExporterInterface $exporter, ListAffinityCatalogVersionsForCourseUseCase $useCase, ?string $search = null): StreamedResponse
+    public function exportExcel(ExcelExporterInterface $exporter, ListAffinityCatalogVersionsForCourseUseCase $useCase, AffinityCatalogVersionRepositoryInterface $repository, ?string $search = null): StreamedResponse
     {
         $this->authorize('exportExcel', AffinityCatalogVersion::class);
 
         return $this->streamExcel(
             $this->exportHeaders(),
-            $this->exportableRows($useCase, $search),
+            $this->exportableRows($useCase, $repository, $search),
             Str::slug(__('Affinity Catalog')).'.xlsx',
             $exporter,
         );
     }
 
-    public function render(ListAffinityCatalogVersionsForCourseUseCase $useCase): View
+    public function render(ListAffinityCatalogVersionsForCourseUseCase $useCase, AffinityCatalogVersionRepositoryInterface $repository): View
     {
         $courses = Course::query()->orderBy('nombre')->get(['id', 'carrera_id', 'codigo', 'nombre'])->load('career');
         $specialties = Specialty::query()->orderBy('nombre')->get(['id', 'nombre']);
 
-        $rows = $this->rowsForSelectedCourse($useCase);
+        $rows = $this->rowsForSelectedCourse($useCase, $repository);
 
         return view('academic.affinity-catalog.livewire.affinity-catalog-component', [
             'courses' => $courses,
@@ -159,7 +200,7 @@ class AffinityCatalogComponent extends Component
      * @param  Collection<int, string>  $specialtyNames
      * @return array<string, mixed>
      */
-    private function toRow(AffinityCatalogVersion $version, $specialtyNames): array
+    private function toRow(AffinityCatalogVersion $version, $specialtyNames, AffinityCatalogVersionRepositoryInterface $repository): array
     {
         return [
             'id' => $version->id(),
@@ -169,6 +210,9 @@ class AffinityCatalogComponent extends Component
             'effectiveStartDate' => $version->effectiveStartDate()->format('Y-m-d'),
             'effectiveEndDate' => $version->effectiveEndDate()?->format('Y-m-d'),
             'specialties' => collect($version->specialtyIds())->map(fn ($id) => $specialtyNames->get($id, '—'))->implode(', '),
+            // Editable only while nothing has cited it yet — see
+            // UpdateAffinityCatalogVersionUseCase for why.
+            'canEdit' => ! $repository->hasVerifications($version->id()),
         ];
     }
 
@@ -179,7 +223,7 @@ class AffinityCatalogComponent extends Component
      *
      * @return array<int, array<string, mixed>>
      */
-    private function rowsForSelectedCourse(ListAffinityCatalogVersionsForCourseUseCase $useCase): array
+    private function rowsForSelectedCourse(ListAffinityCatalogVersionsForCourseUseCase $useCase, AffinityCatalogVersionRepositoryInterface $repository): array
     {
         if ($this->selectedCourseId === null) {
             return [];
@@ -189,7 +233,7 @@ class AffinityCatalogComponent extends Component
         $versions = $useCase->handle($this->selectedCourseId);
 
         return array_map(
-            fn (AffinityCatalogVersion $version) => $this->toRow($version, $specialtyNames),
+            fn (AffinityCatalogVersion $version) => $this->toRow($version, $specialtyNames, $repository),
             $versions,
         );
     }
@@ -197,10 +241,10 @@ class AffinityCatalogComponent extends Component
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function exportableRows(ListAffinityCatalogVersionsForCourseUseCase $useCase, ?string $search): array
+    private function exportableRows(ListAffinityCatalogVersionsForCourseUseCase $useCase, AffinityCatalogVersionRepositoryInterface $repository, ?string $search): array
     {
         return $this->filterRows(
-            $this->rowsForSelectedCourse($useCase),
+            $this->rowsForSelectedCourse($useCase, $repository),
             self::SEARCHABLE,
             filled($search) ? $search : $this->search,
         );

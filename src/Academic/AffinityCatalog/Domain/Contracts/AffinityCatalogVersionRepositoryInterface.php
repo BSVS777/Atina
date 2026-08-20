@@ -23,4 +23,11 @@ interface AffinityCatalogVersionRepositoryInterface
     public function nextVersionNumber(int $courseId): int;
 
     public function save(AffinityCatalogVersion $version): AffinityCatalogVersion;
+
+    /**
+     * True once at least one verification (`verificaciones_atinencia`) has
+     * cited this version — the line past which editing it in place would
+     * rewrite what a historical verification's catalog citation says.
+     */
+    public function hasVerifications(int $catalogVersionId): bool;
 }
