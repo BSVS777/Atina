@@ -51,7 +51,7 @@ class CourseGroup extends Model
 
     public function label(): string
     {
-        return "{$this->course->code} — {$this->course->name} (§{$this->section_number}, {$this->academicTerm->label()})";
+        return "{$this->course->code} — {$this->course->name} (".__('Section')." {$this->section_number}, {$this->academicTerm->label()})";
     }
 
     /**
