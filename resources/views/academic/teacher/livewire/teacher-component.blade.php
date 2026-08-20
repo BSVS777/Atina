@@ -14,7 +14,10 @@
         :sort-dir="$sortDir"
         :per-page="$perPage"
         table-cols="1.2fr 2fr 1.5fr 1fr"
-        :can-create="false"
+        :can-create="Auth::user()->can('create', \App\Models\Teacher::class)"
+        :create-label="__('Add teacher')"
+        :can-export-pdf="Auth::user()->can('exportPdf', \App\Models\Teacher::class)"
+        :can-export-excel="Auth::user()->can('exportExcel', \App\Models\Teacher::class)"
         :title="__('Teachers management')">
 
         @if ($tableMode === 'client')
@@ -42,4 +45,52 @@
         @endforelse
         @endif
     </x-ui.data-table>
+
+    <x-ui.modal :show="$showModal" :title="__('Add teacher')">
+        <div class="form-field">
+            <label for="teacherPosition">{{ __('Position') }}</label>
+            <select id="teacherPosition" wire:model="form.positionId" class="{{ $errors->has('form.positionId') ? 'has-error' : '' }}">
+                <option value="">{{ __('Select a position') }}</option>
+                @foreach ($positions as $position)
+                <option value="{{ $position->id }}">{{ $position->name }}</option>
+                @endforeach
+            </select>
+            @error('form.positionId') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field">
+            <label for="teacherNationalId">{{ __('National ID') }}</label>
+            <input type="text" id="teacherNationalId" wire:model="form.nationalId" class="{{ $errors->has('form.nationalId') ? 'has-error' : '' }}">
+            @error('form.nationalId') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field">
+            <label for="teacherFirstName">{{ __('First name') }}</label>
+            <input type="text" id="teacherFirstName" wire:model="form.firstName" class="{{ $errors->has('form.firstName') ? 'has-error' : '' }}">
+            @error('form.firstName') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field">
+            <label for="teacherLastName">{{ __('Last name') }}</label>
+            <input type="text" id="teacherLastName" wire:model="form.lastName" class="{{ $errors->has('form.lastName') ? 'has-error' : '' }}">
+            @error('form.lastName') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field">
+            <label for="teacherSecondLastName">{{ __('Second last name') }}</label>
+            <input type="text" id="teacherSecondLastName" wire:model="form.secondLastName" class="{{ $errors->has('form.secondLastName') ? 'has-error' : '' }}">
+            @error('form.secondLastName') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field">
+            <label for="teacherEstimatedWorkload">{{ __('Estimated workload') }}</label>
+            <input type="number" step="0.01" min="0" max="1" id="teacherEstimatedWorkload" wire:model="form.estimatedWorkload" class="{{ $errors->has('form.estimatedWorkload') ? 'has-error' : '' }}">
+            @error('form.estimatedWorkload') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field">
+            <label>
+                <input type="checkbox" wire:model="form.active">
+                {{ __('Active') }}
+            </label>
+        </div>
+        <x-slot:footer>
+            <button type="button" class="btn btn-secondary" wire:click="closeModal">{{ __('Cancel') }}</button>
+            <button type="button" class="btn btn-primary" wire:click="save">{{ __('Add teacher') }}</button>
+        </x-slot:footer>
+    </x-ui.modal>
 </div>

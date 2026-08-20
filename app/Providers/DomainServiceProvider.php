@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Models\Teacher;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
@@ -16,6 +17,7 @@ use Src\Academic\AffinityCatalog\Domain\Contracts\AffinityCatalogVersionReposito
 use Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion;
 use Src\Academic\AffinityCatalog\Infrastructure\Persistence\Repositories\EloquentAffinityCatalogVersionRepository;
 use Src\Academic\AffinityCatalog\Presentation\Policies\AffinityCatalogVersionPolicy;
+use Src\Academic\Teacher\Presentation\Policies\TeacherPolicy;
 use Src\Academic\TeacherAssignment\Domain\Contracts\AffinityVerificationRepositoryInterface;
 use Src\Academic\TeacherAssignment\Domain\Contracts\TeacherAssignmentRepositoryInterface;
 use Src\Academic\TeacherAssignment\Domain\Contracts\TechnicalNoteRepositoryInterface;
@@ -69,6 +71,7 @@ final class DomainServiceProvider extends ServiceProvider
         AffinityCatalogVersion::class => AffinityCatalogVersionPolicy::class,
         TeacherAssignment::class => TeacherAssignmentPolicy::class,
         TechnicalNote::class => TechnicalNotePolicy::class,
+        Teacher::class => TeacherPolicy::class,
     ];
 
     public function register(): void
