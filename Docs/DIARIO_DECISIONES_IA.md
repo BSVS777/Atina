@@ -999,3 +999,85 @@ guessed, per the module's own "do not guess silently" instruction:
   Worth a systematic audit (diff every `__('...')` call site against the
   key file) rather than trusting that "it's already wrapped in `__()`"
   means it's actually translated.
+
+---
+
+## 2026-08-20 — Browsershot temp-dir fix + a narrowly-scoped edit action on Catalog versions
+
+### AI consultation
+
+Two requests. First: PDF export was throwing `ErrorException mkdir():
+Permission denied` at `vendor/spatie/temporary-directory/src/TemporaryDirectory.php:50`.
+Second: add row action buttons to the Catálogo de Atinencias table.
+
+### Accepted
+
+- **Browsershot temp path fix.** Browsershot (used by `SpatiePdfExporter`)
+  defaults to `sys_get_temp_dir()` for the intermediate HTML/options files
+  it hands to headless Chrome. On this Windows setup the PHP process
+  identity lacks write access to that OS-level temp folder — confirmed by
+  reading `spatie/temporary-directory`'s `create()`, which calls a bare
+  `mkdir()` with no fallback. Fixed by calling
+  `->setCustomTempPath(storage_path('app/browsershot'))` in
+  `SpatiePdfExporter::fromHtml()`, since `storage/app` is already
+  guaranteed writable by Laravel itself — sidesteps the OS temp dir
+  entirely rather than trying to fix its permissions. The directory is
+  created on demand and tracked with its own `.gitignore` (parent
+  `storage/app/.gitignore` needed an explicit `!browsershot/` exception
+  added, or the whole folder — including its own `.gitignore` — would
+  have been silently excluded by the parent's blanket `*` rule).
+- **Scoped-down edit action on catalog versions** (asked the user first —
+  the initial request was a bare "add edit"). `CreateAffinityCatalogVersionUseCase`
+  and the requirements matrix both document DO-02's explicit rule: "cada
+  actualización crea una nueva versión sin eliminar las anteriores" — no
+  in-place edit, ever. That rule exists because
+  `AffinityVerification.catalogVersionId` is immutable and historical
+  verifications must keep showing the catalog version that was actually
+  applied at the time (DO-02's "historical verification shows the version
+  applied at the time" requirement, already covered by
+  `TeacherAssignmentVerificationTest`). Editing a version already cited by
+  a verification in place would silently rewrite that citation. Presented
+  this conflict to the user with the two real options (edit-only-while-unused
+  vs. unrestricted edit that breaks the historical guarantee); the user chose
+  the safe option. Implemented `UpdateAffinityCatalogVersionUseCase`, which
+  refuses (`CatalogVersionInUseException`) the moment
+  `AffinityCatalogVersionRepositoryInterface::hasVerifications()` is true,
+  still re-validates the overlap rule (excluding itself) and re-runs the
+  same constructor invariants, and audits the change like the create path
+  does. `course_id` and `version_number` are read back from the existing
+  entity rather than trusted from the submitted form, so a tampered
+  request can't move a version to another course or renumber it. The
+  Livewire component computes `canEdit` per row (`! hasVerifications()`)
+  and hides the edit icon once a row is no longer safely editable; the use
+  case re-checks server-side regardless, since a verification could land
+  between page render and form submit.
+
+### Rejected
+
+- Unrestricted in-place editing of any catalog version at any time — the
+  user's literal first request — because it would let an Administrador
+  retroactively change what a past, already-decided teacher-assignment
+  verification's catalog citation shows, contradicting a requirement the
+  matrix already lists as `IMPLEMENTED`.
+- Bulk-checking `hasVerifications()` for all rows in one query — the
+  catalog is a small, per-course, rarely-updated list (new versions are a
+  deliberate administrative act, not routine data entry), so one query per
+  row stays proportional; a batched check would be premature optimization
+  for a table that never grows large in this domain.
+
+### Learning
+
+- A permission-denied error inside a third-party package's temp-file
+  handling is usually not a bug in that package — it's a mismatch between
+  the OS-level directory the package defaults to and what the running
+  process is actually allowed to touch. The generalizable fix is the same
+  shape every time: point the package at a directory the *application*
+  already knows is writable (Laravel's own `storage_path()`) instead of
+  trusting an OS default that varies by host/service-account setup.
+- Not every "add X" request is safe to implement as literally asked. When
+  the codebase already documents *why* a capability was deliberately left
+  out (not just that it was left out), that's a signal to surface the
+  conflict before writing code, not after — the safe middle ground here
+  (edit only before first use) was not something the user had already
+  considered, and delivering the literal ask would have quietly
+  reintroduced a bug DO-02 was written to prevent.
