@@ -829,3 +829,173 @@ cue that they're editable.
   added afterward with a different input type silently fell outside it with
   no error, no lint signal, nothing but a visual inconsistency a human had
   to notice by eye.
+
+---
+
+## 2026-08-20 — Teacher creation, exports, localization audit, upload bug fix
+
+### AI consultation
+
+The user asked for an implementation pass on the three Academic screens
+(Docentes, Catálogo de Atinencias, Verificación de Atinencias): add a real
+"Agregar docente" action (previously read-only by design), add PDF/XLSX
+exports to all three, fully audit and permanently fix the module's
+localization inconsistencies (not just patch the reported examples), fix a
+too-tight header spacing in the Verificación table, and diagnose/fix a
+reported "cannot upload a PDF" bug in the Technical Note attach flow.
+TypeScript/JWT/external-API work was explicitly out of scope for this pass.
+
+Before implementing, the following were confirmed with the user rather than
+guessed, per the module's own "do not guess silently" instruction:
+
+- Teacher creation does **not** create/link a `User` account — `user_id`
+  stays null, matching the existing seeded data shape.
+- Teacher creation is gated on the existing official `usuarios.gestionar`
+  permission (currently granted only to `Administrador` in `RoleSeeder`),
+  not a new SIGA-owned `teachers.create` permission.
+- The English demo seed data in `puestos`/`especialidades` (e.g. "Professor
+  2", "Information Systems Engineering") was left alone this pass — only
+  the two confirmed hardcoded-string bugs (`Teacher`, `Credentials`) were
+  fixed. Reseeding institutional Spanish reference data is a separate,
+  larger decision than this pass's scope.
+- The Technical Note upload environment gap (see below) was fixed locally
+  (`php.ini` `upload_max_filesize`/`post_max_size` raised) so the fix could
+  be verified end-to-end with a real PDF, in addition to the code fix.
+
+### Accepted
+
+- **Teacher creation**: added `TeacherPolicy::create()` (gated on
+  `usuarios.gestionar`, mirroring `AcademicCredentialPolicy`'s
+  single-permission, no-delete-method shape), a `TeacherForm` Form object,
+  and a `CreateTeacherUseCase` that calls `Teacher::create()` directly — no
+  repository/Entity layer was introduced because none existed for Teacher
+  before (it was Presentation-only, read-only by design). Fields exposed:
+  position (select, from `Position::all()`), national ID/cédula, first
+  name, last/second last name, estimated workload, active — exactly the
+  `docentes` table's columns, no invented fields. No edit/delete added;
+  create was the only requested action.
+- **Exports**: reused the existing `InteractsWithExports` trait and
+  `Src\Shared\Export` ports/adapters (Spatie PDF/Excel) end-to-end for all
+  three screens, following `RoleComponent`'s established `exportPdf`/
+  `exportExcel` pattern exactly — no new export library, no duplicate
+  infrastructure. Each screen's export is gated on the same permission its
+  `create`/`decide` action already uses (`usuarios.gestionar` for Docentes,
+  `catalogo.gestionar` for Catálogo, `atinencia.verificar` for
+  Verificación), and respects the current search filter via a new shared
+  `InteractsWithDataTable::filterRows()` (factored out of `paginateRows()`
+  so on-screen filtering and export filtering are guaranteed identical, not
+  two parallel implementations that could drift). Verificación's export
+  adds a `catalogOrJustification` field to `toRow()` — export-only, prefers
+  `justification()` when a future use case starts populating it, falls back
+  to the existing catalog citation today.
+- **Localization root causes** (category A: hardcoded strings — the *only*
+  category that actually needed fixing this pass): `Teacher`, `Credentials`,
+  and `Course` were all already wrapped in `__()` calls — the bug was
+  never a hardcoded string in the traditional sense, it was a **missing
+  `lang/es.json` entry**, silently rendering the literal English string
+  because the app has no `lang/en.json` fallback file to mask the gap
+  (`APP_FALLBACK_LOCALE=en` points at a file that doesn't exist). Fixed by
+  adding the three missing keys. Verified there are no other such gaps in
+  the Academic module by diffing every `__('...')` literal found under
+  `resources/views/academic` and `src/Academic` against `lang/es.json` —
+  zero missing after the fix. Category B (enum/status display values like
+  `Confirmed`/`Ratified`/`Expired`) was already fully covered by existing
+  keys — no action needed. Category C (`puestos`/`especialidades` reference
+  data seeded in English) is a real, verified issue but was explicitly left
+  alone this pass per the user's decision above — documented here so it
+  doesn't get silently rediscovered as "new" later.
+- **Also published `lang/es/validation.php`** (framework-native Laravel
+  Spanish validation strings) — discovered while wiring Teacher's form
+  validation that this file never existed anywhere in the repo, so every
+  form in the app (Role, Permission, AcademicCredential, Teacher, etc.) was
+  silently showing English validation messages under `APP_LOCALE=es`. This
+  is a pre-existing, app-wide gap, not a Teacher-specific one; fixing it in
+  one place fixed it everywhere (full suite re-run confirmed no
+  regressions).
+- **Verificación table spacing**: the shared `.data-row`/`.data-row-head`
+  grid had no `column-gap` at all — every data-table in the app relied
+  purely on `--table-cols` fr-ratios with zero gutter between adjacent
+  header cells. Fixed once at the shared component (`app.css`,
+  `column-gap: 20px` on both rules) rather than special-casing the
+  Verificación view, since the same lack-of-gap affects every table, it was
+  just most visible on Verificación's two long adjacent headers
+  ("Resultado de verificación" / "Catálogo / Justificación").
+- **Technical Note PDF upload — the real bug**: static code tracing alone
+  (Livewire wiring, `WithFileUploads` placement, validation rules, storage
+  config) all checked out correct and did **not** find the actual cause —
+  it only surfaces when the interaction is actually driven in a browser.
+  The real root cause is an **infinite recursion in the dropzone's Alpine
+  JS**: the file `<input>` had `x-on:change="accept($event.target.files)"`,
+  and `accept()` — used by the drag-and-drop path to synthesize a `change`
+  event so Livewire's `wire:model` listener would fire — unconditionally
+  called `this.$refs.input.dispatchEvent(new Event('change', {bubbles:
+  true}))` on every invocation, including when `accept()` itself was
+  invoked *by* that same change event (native file-picker selection, or
+  its own synthesized dispatch). That dispatch re-triggered the same
+  `x-on:change` handler, which called `accept()` again, which dispatched
+  again — an unconditional, always-triggering synchronous recursion that
+  blew the JS call stack (`Maximum call stack size exceeded`, confirmed via
+  live browser console capture) on every single file selection, by any
+  method. This fully explains "cannot upload a PDF" — the browser tab's JS
+  thread crashed before the upload could meaningfully proceed. Fixed by
+  splitting the single `accept()` into `handleFiles()` (UI-state-only,
+  dispatch-free, bound to the input's own `x-on:change`) and `acceptDrop()`
+  (drag-and-drop only: sets `input.files` and dispatches `change` exactly
+  once, which now safely lands on the dispatch-free `handleFiles()`).
+- **Technical Note upload — contributing environment gap**: separately,
+  local `php.ini` had `upload_max_filesize=2M` against the form's own
+  documented 10 MB limit (`TechnicalNoteForm.php` `max:10240`), which would
+  have silently rejected any real signed PDF over ~2 MB even after the JS
+  fix. Raised to `upload_max_filesize=12M` / `post_max_size=20M` locally
+  (matching Livewire's own 12 MB temp-upload default headroom) so the fix
+  could be verified end-to-end with a real PDF, per the user's explicit
+  confirmation. This is a local dev-environment setting, not tracked by
+  git — flagged here so it's not silently rediscovered as a "regression"
+  on a machine where it wasn't applied.
+- **Technical Note upload — silent-failure UI bug**: independently of the
+  above, the `livewire-upload-error` handler only cleared the filename with
+  no user-visible feedback on a real server-side upload failure. Added an
+  `uploadFailed` state and a visible error message so future failures
+  (wrong environment limits, storage errors, etc.) are not silently
+  invisible to the user again.
+- **Verified end-to-end in a real browser** (Playwright, headless
+  Chromium, logged in as the seeded `Administrador` account): created a
+  teacher through the UI and confirmed it appears in the list; downloaded
+  real PDF and XLSX files from all three screens (had to run `npx puppeteer
+  browsers install chrome-headless-shell` first — Browsershot's headless
+  Chrome wasn't present in this environment, a pre-existing setup gap, not
+  introduced by this change); uploaded a real PDF through the Technical
+  Note dropzone and confirmed the resulting "Nota técnica: Ratificación
+  pendiente" row appeared with the exact deadline entered, no console
+  errors.
+
+### Rejected
+
+- A teacher-specific upload permission or teacher-specific validation
+  message convention — reused existing official permissions and, once
+  discovered missing, the framework-native Spanish validation file, instead
+  of inventing anything module-specific.
+- Reseeding `puestos`/`especialidades` demo data to Spanish this pass — a
+  real issue, deliberately deferred, see Accepted above.
+- Patching the Verificación spacing issue with a page-specific style
+  override — fixed once at the shared data-table component instead, since
+  the same gap-less grid affects every table in the app.
+
+### Learning
+
+- A root-cause diagnosis done entirely through static code reading can be
+  wrong even when every individually-checked piece (trait usage, form
+  binding, validation rules, storage config) is correct — an Alpine
+  event-recursion bug only exists in the *interaction between* two pieces
+  of markup that each look fine in isolation, and only manifests when
+  actually driven in a browser. The lesson generalizes: for a "user cannot
+  do X" report tied to client-side interactivity, a real browser
+  reproduction is not optional verification, it's how the actual bug gets
+  found in the first place.
+- `lang/es.json` having no matching `lang/en.json` fallback means every
+  missing Spanish key is a silent literal-English leak with no error, no
+  warning, nothing but a human noticing it by eye — the same category of
+  gap as the `.form-field` selector list from the 2026-08-13 entry above.
+  Worth a systematic audit (diff every `__('...')` call site against the
+  key file) rather than trusting that "it's already wrapped in `__()`"
+  means it's actually translated.
