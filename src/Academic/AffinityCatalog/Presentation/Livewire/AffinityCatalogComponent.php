@@ -5,17 +5,22 @@ declare(strict_types=1);
 namespace Src\Academic\AffinityCatalog\Presentation\Livewire;
 
 use App\Livewire\Concerns\InteractsWithDataTable;
+use App\Livewire\Concerns\InteractsWithExports;
 use App\Models\Course;
 use App\Models\Specialty;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Livewire\Component;
 use Src\Academic\AffinityCatalog\Application\UseCases\CreateAffinityCatalogVersionUseCase;
 use Src\Academic\AffinityCatalog\Application\UseCases\ListAffinityCatalogVersionsForCourseUseCase;
 use Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion;
 use Src\Academic\AffinityCatalog\Domain\Exceptions\OverlappingCatalogVersionException;
 use Src\Academic\AffinityCatalog\Presentation\Livewire\Forms\AffinityCatalogVersionForm;
+use Src\Shared\Export\Contracts\ExcelExporterInterface;
+use Src\Shared\Export\Contracts\PdfExporterInterface;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * DO-02: lists the versioned catalog for a selected course and lets the
@@ -26,6 +31,7 @@ class AffinityCatalogComponent extends Component
 {
     use AuthorizesRequests;
     use InteractsWithDataTable;
+    use InteractsWithExports;
 
     /**
      * Row keys the search box matches against. Deliberately excludes
@@ -103,18 +109,38 @@ class AffinityCatalogComponent extends Component
         $this->dispatch('toast', variant: 'success', text: __('Affinity catalog version published.'));
     }
 
+    public function exportPdf(PdfExporterInterface $exporter, ListAffinityCatalogVersionsForCourseUseCase $useCase, ?string $search = null): StreamedResponse
+    {
+        $this->authorize('exportPdf', AffinityCatalogVersion::class);
+
+        return $this->streamPdf(
+            __('Affinity Catalog'),
+            $this->exportHeaders(),
+            $this->exportableRows($useCase, $search),
+            Str::slug(__('Affinity Catalog')).'.pdf',
+            $exporter,
+            paperSize: 'letter',
+        );
+    }
+
+    public function exportExcel(ExcelExporterInterface $exporter, ListAffinityCatalogVersionsForCourseUseCase $useCase, ?string $search = null): StreamedResponse
+    {
+        $this->authorize('exportExcel', AffinityCatalogVersion::class);
+
+        return $this->streamExcel(
+            $this->exportHeaders(),
+            $this->exportableRows($useCase, $search),
+            Str::slug(__('Affinity Catalog')).'.xlsx',
+            $exporter,
+        );
+    }
+
     public function render(ListAffinityCatalogVersionsForCourseUseCase $useCase): View
     {
         $courses = Course::query()->orderBy('nombre')->get(['id', 'carrera_id', 'codigo', 'nombre'])->load('career');
         $specialties = Specialty::query()->orderBy('nombre')->get(['id', 'nombre']);
 
-        $versions = $this->selectedCourseId !== null ? $useCase->handle($this->selectedCourseId) : [];
-        $specialtyNames = $specialties->pluck('name', 'id');
-
-        $rows = array_map(
-            fn (AffinityCatalogVersion $version) => $this->toRow($version, $specialtyNames),
-            $versions,
-        );
+        $rows = $this->rowsForSelectedCourse($useCase);
 
         return view('academic.affinity-catalog.livewire.affinity-catalog-component', [
             'courses' => $courses,
@@ -143,6 +169,55 @@ class AffinityCatalogComponent extends Component
             'effectiveStartDate' => $version->effectiveStartDate()->format('Y-m-d'),
             'effectiveEndDate' => $version->effectiveEndDate()?->format('Y-m-d'),
             'specialties' => collect($version->specialtyIds())->map(fn ($id) => $specialtyNames->get($id, '—'))->implode(', '),
+        ];
+    }
+
+    /**
+     * Shared by render() (feeds paginateRows()) and exportableRows()
+     * (feeds filterRows()) — the one place that knows how to build a row
+     * array for the currently selected course.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function rowsForSelectedCourse(ListAffinityCatalogVersionsForCourseUseCase $useCase): array
+    {
+        if ($this->selectedCourseId === null) {
+            return [];
+        }
+
+        $specialtyNames = Specialty::query()->orderBy('nombre')->get(['id', 'nombre'])->pluck('name', 'id');
+        $versions = $useCase->handle($this->selectedCourseId);
+
+        return array_map(
+            fn (AffinityCatalogVersion $version) => $this->toRow($version, $specialtyNames),
+            $versions,
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function exportableRows(ListAffinityCatalogVersionsForCourseUseCase $useCase, ?string $search): array
+    {
+        return $this->filterRows(
+            $this->rowsForSelectedCourse($useCase),
+            self::SEARCHABLE,
+            filled($search) ? $search : $this->search,
+        );
+    }
+
+    /**
+     * @return array<int, array{key: string, label: string, format?: callable}>
+     */
+    private function exportHeaders(): array
+    {
+        return [
+            ['key' => 'version', 'label' => __('Version')],
+            ['key' => 'councilAgreement', 'label' => __('Council agreement')],
+            ['key' => 'gazetteNumber', 'label' => __('Gazette number')],
+            ['key' => 'effectiveStartDate', 'label' => __('Effective from')],
+            ['key' => 'effectiveEndDate', 'label' => __('Effective until'), 'format' => fn (string $value): string => $value !== '' ? $value : __('Indefinite')],
+            ['key' => 'specialties', 'label' => __('Affine specialties')],
         ];
     }
 }

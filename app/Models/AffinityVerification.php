@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Database\Factories\AffinityVerificationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Src\Academic\TeacherAssignment\Domain\VerificationResult;
@@ -28,6 +30,9 @@ use Src\Academic\TeacherAssignment\Infrastructure\Persistence\Casts\Verification
 #[Fillable(['asignacion_docente_id', 'catalogo_atinencia_id', 'atestado_id', 'user_id', 'resultado', 'es_provisional', 'justificacion'])]
 class AffinityVerification extends Model
 {
+    /** @use HasFactory<AffinityVerificationFactory> */
+    use HasFactory;
+
     protected $table = 'verificaciones_atinencia';
 
     const UPDATED_AT = null;

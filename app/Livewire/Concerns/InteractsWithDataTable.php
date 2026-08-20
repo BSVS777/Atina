@@ -130,7 +130,7 @@ trait InteractsWithDataTable
      * updates the DOM correctly on its own — every concrete component's
      * save()/delete() can call this unconditionally regardless of mode.
      *
-     * @param array<int, array<string, mixed>> $rows
+     * @param  array<int, array<string, mixed>>  $rows
      */
     public function refreshTable(array $rows): void
     {
@@ -158,19 +158,7 @@ trait InteractsWithDataTable
      */
     public function paginateRows(array $rows, array $searchable): LengthAwarePaginator
     {
-        if ($this->search !== '' && $searchable !== []) {
-            $term = mb_strtolower(trim($this->search));
-
-            $rows = array_values(array_filter($rows, function (array $row) use ($searchable, $term): bool {
-                foreach ($searchable as $key) {
-                    if (str_contains(mb_strtolower((string) ($row[$key] ?? '')), $term)) {
-                        return true;
-                    }
-                }
-
-                return false;
-            }));
-        }
+        $rows = $this->filterRows($rows, $searchable, $this->search);
 
         if ($this->sortKey !== '') {
             $key = $this->sortKey;
@@ -197,5 +185,33 @@ trait InteractsWithDataTable
             $this->perPage,
             $this->page,
         );
+    }
+
+    /**
+     * Search-only filter, factored out of paginateRows() so an export path
+     * (which must scan the full result set, never a single page) can apply
+     * the exact same matching rule without going through pagination.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  array<int, string>  $searchable  row keys the search matches against
+     * @return array<int, array<string, mixed>>
+     */
+    public function filterRows(array $rows, array $searchable, ?string $search): array
+    {
+        if ($search === null || $search === '' || $searchable === []) {
+            return $rows;
+        }
+
+        $term = mb_strtolower(trim($search));
+
+        return array_values(array_filter($rows, function (array $row) use ($searchable, $term): bool {
+            foreach ($searchable as $key) {
+                if (str_contains(mb_strtolower((string) ($row[$key] ?? '')), $term)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }));
     }
 }

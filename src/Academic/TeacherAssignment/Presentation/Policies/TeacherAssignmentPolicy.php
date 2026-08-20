@@ -24,4 +24,14 @@ class TeacherAssignmentPolicy
     {
         return $user->hasPermissionTo('atinencia.verificar');
     }
+
+    public function exportPdf(User $user): bool
+    {
+        return $user->hasPermissionTo('atinencia.verificar');
+    }
+
+    public function exportExcel(User $user): bool
+    {
+        return $user->hasPermissionTo('atinencia.verificar');
+    }
 }

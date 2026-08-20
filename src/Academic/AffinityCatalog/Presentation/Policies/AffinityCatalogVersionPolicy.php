@@ -21,4 +21,14 @@ class AffinityCatalogVersionPolicy
     {
         return $user->hasPermissionTo('catalogo.gestionar');
     }
+
+    public function exportPdf(User $user): bool
+    {
+        return $user->hasPermissionTo('catalogo.gestionar');
+    }
+
+    public function exportExcel(User $user): bool
+    {
+        return $user->hasPermissionTo('catalogo.gestionar');
+    }
 }

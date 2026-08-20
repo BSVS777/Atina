@@ -28,6 +28,8 @@
         table-cols="0.6fr 1.4fr 1fr 1.2fr 1.2fr 2.6fr 0.6fr"
         :can-create="$canManage"
         :create-label="__('New version')"
+        :can-export-pdf="Auth::user()->can('exportPdf', \Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion::class)"
+        :can-export-excel="Auth::user()->can('exportExcel', \Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion::class)"
         :title="$selectedCourse ? $selectedCourse->code . ' — ' . $selectedCourse->name : __('Catalog versions')">
 
         @forelse ($versions as $row)

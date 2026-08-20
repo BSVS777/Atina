@@ -17,6 +17,8 @@
         :can-create="$canPropose"
         :create-label="__('Propose teacher')"
         create-action="$wire.openProposeModal()"
+        :can-export-pdf="Auth::user()->can('exportPdf', \Src\Academic\TeacherAssignment\Domain\Entities\TeacherAssignment::class)"
+        :can-export-excel="Auth::user()->can('exportExcel', \Src\Academic\TeacherAssignment\Domain\Entities\TeacherAssignment::class)"
         :title="__('Proposed assignments')">
 
         @forelse ($assignments as $row)

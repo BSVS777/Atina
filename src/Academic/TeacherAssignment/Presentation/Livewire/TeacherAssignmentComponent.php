@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Src\Academic\TeacherAssignment\Presentation\Livewire;
 
 use App\Livewire\Concerns\InteractsWithDataTable;
+use App\Livewire\Concerns\InteractsWithExports;
 use App\Models\AffinityCatalogVersion;
 use App\Models\CourseGroup;
 use App\Models\Teacher;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Src\Academic\TeacherAssignment\Application\DTOs\AssignmentOverview;
@@ -26,6 +28,9 @@ use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidAssignmentTransition
 use Src\Academic\TeacherAssignment\Domain\VerificationResult;
 use Src\Academic\TeacherAssignment\Presentation\Livewire\Forms\ProposeAssignmentForm;
 use Src\Academic\TeacherAssignment\Presentation\Livewire\Forms\TechnicalNoteForm;
+use Src\Shared\Export\Contracts\ExcelExporterInterface;
+use Src\Shared\Export\Contracts\PdfExporterInterface;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * DO-02a/DO-02b/DO-02d in one screen: proposing a teacher for a course
@@ -37,6 +42,7 @@ class TeacherAssignmentComponent extends Component
 {
     use AuthorizesRequests;
     use InteractsWithDataTable;
+    use InteractsWithExports;
     use WithFileUploads;
 
     /**
@@ -156,6 +162,32 @@ class TeacherAssignmentComponent extends Component
         $this->dispatch('toast', variant: 'success', text: __('Technical note rejected.'));
     }
 
+    public function exportPdf(PdfExporterInterface $exporter, ListTeacherAssignmentsUseCase $useCase, ?string $search = null): StreamedResponse
+    {
+        $this->authorize('exportPdf', TeacherAssignment::class);
+
+        return $this->streamPdf(
+            __('Teaching Affinity Verification'),
+            $this->exportHeaders(),
+            $this->exportableRows($useCase, $search),
+            Str::slug(__('Teaching Affinity Verification')).'.pdf',
+            $exporter,
+            paperSize: 'letter',
+        );
+    }
+
+    public function exportExcel(ExcelExporterInterface $exporter, ListTeacherAssignmentsUseCase $useCase, ?string $search = null): StreamedResponse
+    {
+        $this->authorize('exportExcel', TeacherAssignment::class);
+
+        return $this->streamExcel(
+            $this->exportHeaders(),
+            $this->exportableRows($useCase, $search),
+            Str::slug(__('Teaching Affinity Verification')).'.xlsx',
+            $exporter,
+        );
+    }
+
     public function render(ListTeacherAssignmentsUseCase $useCase): View
     {
         $overviews = $useCase->handle();
@@ -199,6 +231,10 @@ class TeacherAssignmentComponent extends Component
         $verification = $overview->latestVerification;
         $note = $overview->technicalNote;
 
+        $catalogCitation = $verification?->catalogVersionId() !== null
+            ? $catalogCitations->get($verification->catalogVersionId())
+            : null;
+
         return [
             'id' => $assignment->id(),
             'teacher' => $teacherNames->get($assignment->teacherId(), '—'),
@@ -206,9 +242,11 @@ class TeacherAssignmentComponent extends Component
             'status' => $assignment->status()->value,
             'result' => $verification?->result()->value,
             'isProvisional' => $verification?->isProvisional() ?? false,
-            'catalogCitation' => $verification?->catalogVersionId() !== null
-                ? $catalogCitations->get($verification->catalogVersionId())
-                : null,
+            'catalogCitation' => $catalogCitation,
+            // Export-only: prefers the verification's free-text justification
+            // (e.g. a "Sin catálogo" manual decision) over the catalog
+            // citation when both exist; the on-screen table never reads this.
+            'catalogOrJustification' => $verification?->justification() ?? $catalogCitation,
             'canAttachNote' => $verification !== null
                 && in_array($verification->result(), [VerificationResult::NotMatched, VerificationResult::NoCatalog], true)
                 && $note === null,
@@ -220,6 +258,51 @@ class TeacherAssignmentComponent extends Component
                 'deadline' => $note->ratificationDeadline()->format('Y-m-d'),
                 'isPending' => $note->status()->value === 'pending_ratification',
             ],
+        ];
+    }
+
+    /**
+     * Mirrors render()'s row-building (teacher/group/catalog lookups) but
+     * scans every assignment instead of paginating, then applies the same
+     * search filter as the on-screen table via InteractsWithDataTable's
+     * filterRows().
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function exportableRows(ListTeacherAssignmentsUseCase $useCase, ?string $search): array
+    {
+        $overviews = $useCase->handle();
+        $teacherNames = Teacher::query()->get()->mapWithKeys(fn (Teacher $teacher) => [$teacher->id => $teacher->fullName()]);
+        $groupLabels = CourseGroup::query()->with(['course', 'academicTerm'])->get()->mapWithKeys(fn (CourseGroup $group) => [$group->id => $group->label()]);
+        $catalogCitations = AffinityCatalogVersion::query()->get()->mapWithKeys(
+            fn (AffinityCatalogVersion $version) => [$version->id => "v{$version->version} — {$version->acuerdo} / Gaceta {$version->numero_gaceta}"]
+        );
+
+        $rows = array_map(
+            fn (AssignmentOverview $overview) => $this->toRow($overview, $teacherNames, $groupLabels, $catalogCitations),
+            $overviews,
+        );
+
+        return $this->filterRows($rows, self::SEARCHABLE, filled($search) ? $search : $this->search);
+    }
+
+    /**
+     * @return array<int, array{key: string, label: string, format?: callable}>
+     */
+    private function exportHeaders(): array
+    {
+        return [
+            ['key' => 'teacher', 'label' => __('Teacher')],
+            ['key' => 'group', 'label' => __('Course / context')],
+            ['key' => 'status', 'label' => __('Status'), 'format' => fn (string $value): string => __(ucfirst($value))],
+            ['key' => 'result', 'label' => __('Verification result'), 'format' => fn (string $value): string => match ($value) {
+                'matched' => __('Atinente'),
+                'not_matched' => __('No Atinente'),
+                'technical_note' => __('Nota técnica'),
+                'no_catalog' => __('Sin catálogo'),
+                default => '—',
+            }],
+            ['key' => 'catalogOrJustification', 'label' => __('Catalog / justification'), 'format' => fn (string $value): string => $value !== '' ? $value : '—'],
         ];
     }
 }
