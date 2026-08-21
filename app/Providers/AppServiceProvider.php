@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Console\ServeCommand;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -23,7 +24,25 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->configureLocalServerEnvironment();
         $this->configureDefaults();
+    }
+
+    /**
+     * Preserve the operating system's writable temporary directory when
+     * Artisan starts PHP's local development server.
+     */
+    protected function configureLocalServerEnvironment(): void
+    {
+        if (! $this->app->runningInConsole()) {
+            return;
+        }
+
+        ServeCommand::$passthroughVariables = array_values(array_unique([
+            ...ServeCommand::$passthroughVariables,
+            'TEMP',
+            'TMP',
+        ]));
     }
 
     /**
