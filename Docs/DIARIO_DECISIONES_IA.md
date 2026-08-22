@@ -1081,3 +1081,45 @@ Second: add row action buttons to the Catálogo de Atinencias table.
   (edit only before first use) was not something the user had already
   considered, and delivering the literal ask would have quietly
   reintroduced a bug DO-02 was written to prevent.
+
+---
+
+## 2026-08-21 — Fix: cancelling the technical-note upload dropzone didn't clear the file
+
+### AI consultation
+
+User reported: uploading a PDF in "Adjuntar nota técnica" and then hitting
+Cancel or the X doesn't remove the file — and opening the modal for a
+*different* row afterwards still shows the previous file selected.
+
+### Accepted
+
+- Two independent bugs, same feature, fixed together:
+  1. **Backend**: `closeNoteModal()` only flipped `showNoteModal = false` —
+     it never reset `noteForm` nor deleted the already-uploaded
+     `TemporaryUploadedFile` from `storage/app/livewire-tmp`, unlike
+     `openNoteModal()` which does reset. Fixed by calling
+     `$this->noteForm->document?->delete()` then `reset()` +
+     `resetValidation()` in `closeNoteModal()`
+     (`TeacherAssignmentComponent.php`), mirroring what open already did.
+  2. **Frontend**: the note modal (`x-ui.modal`) is always present in the
+     DOM (visibility toggled by a CSS class, not `x-if`/`wire:key` on the
+     modal itself), so the dropzone's Alpine `x-data` (`fileName`,
+     `invalid`, `uploadFailed`) never unmounts between opens — it's local
+     client state Livewire's re-render can't touch. Fixed by keying the
+     dropzone `<div>` on `wire:key="note-dropzone-{{ $activeAssignmentId
+     }}-{{ $showNoteModal ? 'open' : 'closed' }}"`, so morphdom
+     destroys/recreates the element (and Alpine reinitializes fresh) on
+     every open, close, or row switch.
+- Added `test_closing_the_modal_clears_the_selected_document_and_deletes_its_temp_file`
+  to `TechnicalNoteUploadTest` asserting both the Livewire property and the
+  physical temp file are gone after `closeNoteModal()`.
+
+### Learning
+
+- A Blade modal that stays mounted in the DOM (hidden via CSS, not
+  conditionally rendered) silently decouples any Alpine `x-data` inside it
+  from the Livewire component's lifecycle: PHP-side `reset()` never
+  reaches client-only state. `wire:key`ing the stateful inner element to
+  something that changes on every open/close is the fix, not trying to
+  drive Alpine state from PHP.

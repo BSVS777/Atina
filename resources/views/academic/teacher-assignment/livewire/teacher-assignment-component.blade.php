@@ -134,7 +134,8 @@
                 ON the input and bubble up, which is why this wrapper -- an
                 ancestor of the input -- can listen for them.
             --}}
-            <div class="dropzone {{ $errors->has('noteForm.document') ? 'has-error' : '' }}"
+            <div wire:key="note-dropzone-{{ $activeAssignmentId }}-{{ $showNoteModal ? 'open' : 'closed' }}"
+                class="dropzone {{ $errors->has('noteForm.document') ? 'has-error' : '' }}"
                 x-data="{
                     dragging: false,
                     fileName: '',

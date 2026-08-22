@@ -114,6 +114,9 @@ class TeacherAssignmentComponent extends Component
 
     public function closeNoteModal(): void
     {
+        $this->noteForm->document?->delete();
+        $this->noteForm->reset();
+        $this->resetValidation();
         $this->showNoteModal = false;
     }
 

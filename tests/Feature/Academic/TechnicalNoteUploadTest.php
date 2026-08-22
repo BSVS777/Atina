@@ -135,6 +135,24 @@ class TechnicalNoteUploadTest extends TestCase
         $this->assertDatabaseCount('notas_tecnicas', 0);
     }
 
+    public function test_closing_the_modal_clears_the_selected_document_and_deletes_its_temp_file(): void
+    {
+        $this->actingAs($this->userWithPermission('atinencia.verificar'));
+        $assignmentId = $this->notMatchedAssignmentId();
+
+        $component = Livewire::test(TeacherAssignmentComponent::class)
+            ->call('openNoteModal', $assignmentId)
+            ->set('noteForm.document', UploadedFile::fake()->create('criterio.pdf', 500, 'application/pdf'));
+
+        $tempPath = $component->get('noteForm.document')->getRealPath();
+        $this->assertFileExists($tempPath);
+
+        $component->call('closeNoteModal');
+
+        $this->assertNull($component->get('noteForm.document'));
+        $this->assertFileDoesNotExist($tempPath);
+    }
+
     public function test_invalid_deadline_is_rejected_and_creates_no_partial_records(): void
     {
         $this->actingAs($this->userWithPermission('atinencia.verificar'));
