@@ -1250,3 +1250,90 @@ JWT and an external REST API were explicitly out of scope for this batch.
   the DB before touching the seeder — the fix might be "point the seeder
   at what's already there and clean up the duplicates it created," not
   "invent a new translation."
+
+## 2026-08-24 — Small verification correction: local environment fix, full suite re-run, professor-decision documentation correction
+
+### AI consultation
+
+User asked for a small, non-feature correction pass: fix the local
+environment issues that had left `php artisan test` at 116/122 in the
+prior Batch 1 verification, re-run the full suite and static/build
+checks, and correct any current-state documentation that still presented
+two business decisions as unresolved after the professor had since
+explicitly confirmed them. No TypeScript, JWT, or external REST API work;
+no push.
+
+### Accepted
+
+- **Local `.env` locale fix**: `APP_LOCALE`/`APP_FALLBACK_LOCALE` were
+  `en`/`en` locally against a project intended to run in Spanish
+  (`.env.example` already specified `es`/`en`). Corrected the local `.env`
+  only (not committed) to `APP_LOCALE=es`, ran `optimize:clear`, confirmed
+  `app()->getLocale()` resolves to `es`.
+- **Restored `vendor/` via `composer install`**: `spatie/simple-excel` was
+  declared in `composer.json`/`composer.lock` but missing from the local
+  `vendor/` install (a stale/partial local install, not a lockfile
+  problem). `composer install` reconciled `vendor/` against the existing
+  lock file — no `composer.json`/`composer.lock` changes. This also
+  removed several Pest packages that were present in `vendor/` but not
+  declared in `composer.lock` (the project's actual test framework is
+  PHPUnit, confirmed via `composer.json`'s `require-dev`), and brought a
+  few packages up to their already-locked versions.
+- **Professor-decision documentation correction**: the professor has since
+  explicitly confirmed two items `FINAL_ACADEMIC_MODULE_AUDIT.md` had
+  flagged as needing confirmation: (1) affinity matching is specialty-only
+  — the credential's specialty must be explicitly listed in the course's
+  applicable catalog entry; degree level does not independently determine
+  affinity; a related specialty is not automatically affine (e.g. a
+  Cybersecurity specialty is not automatically affine to a Programming
+  course); no semantic/fuzzy/AI-based inference. (2) Administrador's
+  broader-than-SRS-text Academic-module access (Technical-Note-creation,
+  No-Catalog-decision) is intentional — Administrador has access to
+  everything. Updated the relevant classifications/tables in
+  `FINAL_ACADEMIC_MODULE_AUDIT.md` (the document that actually contained
+  the "NEEDS PROFESSOR DECISION" wording) from unresolved to
+  professor-confirmed, preserving the underlying code-trace evidence.
+  `Docs/ACADEMIC_AFFINITY_REQUIREMENTS_MATRIX.md` and `README.md` were
+  checked and already contained no stale wording on either point.
+
+### Rejected
+
+- Changing the affinity-matching algorithm or the authorization model —
+  the professor's confirmation matches what the code already does
+  (exact specialty-ID membership; Administrador granted every Academic
+  permission), so no behavior change was needed, only the documentation's
+  status.
+- Rewriting the predates-all-versions catalog edge case
+  (`FINAL_ACADEMIC_MODULE_AUDIT.md` §11/§13, `CatalogVersionResolver`'s
+  behavior when the target date precedes every catalog version) — the
+  professor has not confirmed this one; left explicitly unresolved and
+  the current fallback-to-earliest-version behavior unchanged.
+- A broader rewrite of `FINAL_ACADEMIC_MODULE_AUDIT.md` (e.g. its DO-01
+  citation gap or DO-02b form-only-validation findings, which the batch
+  instructions scoped to a later pass) — out of scope for this
+  correction; only the two professor-confirmed items were touched.
+
+### Verification
+
+- `php artisan test`: 122/122 passing (267 assertions), up from the prior
+  116/122 — the six prior failures were exactly the locale and
+  `spatie/simple-excel` issues above, both environment-only.
+- `./vendor/bin/phpstan analyse`: the bare command crashes with a PHP
+  memory-limit exhaustion (128M default CLI `memory_limit`) — an
+  environment quirk the project's own `composer.json` `types:check`
+  script already works around via `--memory-limit=1G`. Re-run with that
+  flag: 0 errors, PASS.
+- `./vendor/bin/pint --test`: fails on 20 pre-existing baseline files, all
+  confirmed (via `git log -1 -- <path>` per file) to trace only to the
+  original `c112f53` SIGA-starter-kit-baseline commit — none touched by
+  any Academic-batch commit. All files touched by the Academic work pass
+  Pint.
+- `npm run build`: succeeds, 24 modules transformed.
+
+### Learning
+
+- A bare `./vendor/bin/phpstan analyse` failing with no diagnostics isn't
+  automatically "unverifiable" — check whether the project's own Composer
+  scripts already invoke it with a non-default flag (here,
+  `--memory-limit=1G`) before concluding the tool itself is broken in this
+  environment.
