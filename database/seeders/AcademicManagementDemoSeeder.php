@@ -18,18 +18,18 @@ class AcademicManagementDemoSeeder extends Seeder
 {
     public function run(): void
     {
-        collect(['Professor 2', 'Professor 3', 'Professor 4', 'Specialist Professor 1'])
+        collect(['Profesor 2', 'Profesor 3', 'Profesor 4', 'Profesor Especialista 1'])
             ->each(fn (string $name) => Position::query()->firstOrCreate(['nombre' => $name]));
 
         collect([
-            'Information Systems Engineering',
-            'Computer Engineering',
-            'Business Administration',
-            'Industrial Engineering',
-            'Public Accounting',
-            'Education Sciences with English Emphasis',
-            'Environmental Engineering',
-            'Food Engineering',
+            'Ingeniería en Sistemas de Información',
+            'Ingeniería en Computación',
+            'Administración de Empresas',
+            'Ingeniería Industrial',
+            'Contaduría Pública',
+            'Ciencias de la Educación con énfasis en Inglés',
+            'Ingeniería Ambiental',
+            'Ingeniería en Alimentos',
         ])->each(fn (string $name) => Specialty::query()->firstOrCreate(['nombre' => $name]));
 
         if (Teacher::query()->count() > 0) {
