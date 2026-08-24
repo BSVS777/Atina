@@ -104,16 +104,27 @@ class TeacherProfileComponent extends Component
     {
         $specialties = Specialty::query()->orderBy('nombre')->get(['id', 'nombre']);
         $specialtyNames = $specialties->pluck('name', 'id');
+        $courses = Course::query()->with('career')->orderBy('nombre')->get();
 
         $affineSpecialtyIds = null;
         $catalogCitation = null;
+        $courseContextLabel = null;
 
         if ($this->contextCourseId !== null) {
+            $contextCourse = $courses->firstWhere('id', $this->contextCourseId);
             $resolved = $resolveUseCase->handle($this->contextCourseId, new DateTimeImmutable);
+
+            if ($contextCourse !== null) {
+                $courseContextLabel = __(':career · :code — :name', [
+                    'career' => $contextCourse->career->name,
+                    'code' => $contextCourse->code,
+                    'name' => $contextCourse->name,
+                ]);
+            }
 
             if ($resolved !== null) {
                 $affineSpecialtyIds = $resolved->version->specialtyIds();
-                $catalogCitation = __('v:number — :agreement / Gazette :gazette:provisional', [
+                $catalogCitation = __('Catalog v:number · Agreement :agreement · Gazette :gazette:provisional', [
                     'number' => $resolved->version->versionNumber(),
                     'agreement' => $resolved->version->councilAgreement(),
                     'gazette' => $resolved->version->gazetteNumber(),
@@ -131,8 +142,9 @@ class TeacherProfileComponent extends Component
             'rows' => $rows,
             'specialties' => $specialties,
             'degreeLevels' => DegreeLevel::cases(),
-            'courses' => Course::query()->orderBy('nombre')->get(),
+            'courses' => $courses,
             'contextEvaluated' => $this->contextCourseId !== null,
+            'courseContextLabel' => $courseContextLabel,
             'catalogCitation' => $catalogCitation,
             'canManage' => auth()->user()->can('create', AcademicCredential::class)
                 || auth()->user()->can('update', AcademicCredential::class),

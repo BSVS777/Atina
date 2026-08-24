@@ -36,6 +36,7 @@
   "Catalog / justification": "Catálogo / justificación",
   "Credentials": "Atestados",
   "Catalog applied": "Catálogo aplicado",
+  "Catalog v:number · Agreement :agreement · Gazette :gazette:provisional": "Catálogo v:number · Acuerdo :agreement · Gaceta :gazette:provisional",
   "Catalog versions": "Versiones del catálogo",
   "Centralizes study plans, physical spaces, teaching pertinence, student requests, and reports for the Regional Campus San Carlos in one place, traceable and always updated.": "Centraliza planes de estudio, espacios físicos, atinencia docente, solicitudes estudiantiles y reportes de la Sede Regional San Carlos en un solo lugar, trazable y siempre actualizado.",
   "Change photo": "Cambiar foto",
@@ -228,5 +229,6 @@
   "permissions": "permisos",
   "provisional": "provisional",
   "v:number": "v:number",
-  "v:number — :agreement / Gazette :gazette:provisional": "v:number — :agreement / Gaceta :gazette:provisional"
+  "v:number — :agreement / Gazette :gazette:provisional": "v:number — :agreement / Gaceta :gazette:provisional",
+  ":career · :code — :name": ":career · :code — :name"
 }

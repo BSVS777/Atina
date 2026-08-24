@@ -23,13 +23,18 @@
             </select>
         </div>
         @if ($contextEvaluated)
-        <p style="margin-top: .75rem; color: var(--textSecondary);">
-            @if ($catalogCitation)
-                {{ __('Catalog applied') }}: {{ $catalogCitation }}
-            @else
-                {{ __('No catalog published for this course yet.') }}
+        <div style="margin-top: .75rem;">
+            @if ($courseContextLabel)
+            <p style="margin: 0; font-weight: 600;">{{ $courseContextLabel }}</p>
             @endif
-        </p>
+            <p style="margin: .25rem 0 0; color: var(--textSecondary);">
+                @if ($catalogCitation)
+                    {{ $catalogCitation }}
+                @else
+                    {{ __('No catalog published for this course yet.') }}
+                @endif
+            </p>
+        </div>
         @endif
     </div>
 
