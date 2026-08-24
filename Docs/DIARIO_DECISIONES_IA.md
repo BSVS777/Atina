@@ -1123,3 +1123,130 @@ Cancel or the X doesn't remove the file — and opening the modal for a
   reaches client-only state. `wire:key`ing the stateful inner element to
   something that changes on every open/close is the fix, not trying to
   drive Alpine state from PHP.
+
+---
+
+## 2026-08-24 — Batch 1: functional/UI acceptance closeout (DO-01/02a/02b/02d) + localization cleanup
+
+### AI consultation
+
+User asked to implement `Docs/Atina_Implementation_Prompt_Batches/01_BATCH_FUNCTIONAL_UI_CLOSEOUT.md`,
+a scripted closeout pass covering four literal UI acceptance gaps a prior
+audit (`FINAL_ACADEMIC_MODULE_AUDIT.md`, untracked in this working copy)
+had flagged against the Academic module, plus a full localization audit
+and a re-verification of the Technical Note PDF upload flow. TypeScript,
+JWT and an external REST API were explicitly out of scope for this batch.
+
+### Accepted
+
+- **DO-01 citation gap (career/course missing)**: `TeacherProfileComponent`
+  now eager-loads `Course::with('career')` for the context-course dropdown
+  and, once a course is selected, renders a `:career · :code — :name` line
+  (e.g. "Ingeniería del Software · ISW-521 — Programación en Ambiente Web
+  I") above the existing catalog citation line, which was itself reworded
+  from `v:number — :agreement / Gazette :gazette` to `Catalog v:number ·
+  Agreement :agreement · Gazette :gazette` to match the target presentation
+  concept in the batch brief. No change to the affinity engine, schema, or
+  `ResolveApplicableCatalogVersionUseCase` — this is presentation-layer
+  only, reusing the already-loaded `Course→Career` relationship. Covered by
+  a new `TeacherProfileComponentTest::test_evaluating_affinity_in_a_course_context_shows_career_course_version_and_agreement`.
+- **DO-02a blocking message**: added an explicit "Assignment blocked: the
+  teacher does not meet the affinity required for this course." line under
+  the "No Atinente" badge in `TeacherAssignmentComponent`'s table, shown
+  only for `not_matched` results. Badge and "Attach technical note" action
+  unchanged.
+- **DO-02d manual-approval label**: added an explicit "No catalog —
+  pending manual approval" line, shown only while `canDecideNoCatalog` is
+  true (i.e. `no_catalog` result, not yet decided) — derived from existing
+  state, no new DB enum. Approve/Reject/audit behavior unchanged.
+- **Technical Note pending label**: replaced the generic
+  `"Technical note: Pending ratification (date)"` line with an explicit
+  "Technical note — ratification pending from the University Council" +
+  "Deadline: :date" pair, shown only while the note's status is
+  `pending_ratification`; ratified/rejected/expired notes keep the
+  previous generic rendering (`ucfirst(str_replace('_',' ', status))`),
+  since the batch only asked to clarify the *pending* state.
+- **Localization audit**: diffed every `__('...')` call site under
+  `resources/views/academic` and `src/Academic` against `lang/es.json` —
+  zero missing keys (the four new UI-copy additions above were added to
+  `lang/es.json`). Added the ~14 previously-missing custom validation
+  attribute labels for `AcademicCredentialForm`, `AffinityCatalogVersionForm`,
+  `ProposeAssignmentForm` and `TechnicalNoteForm` to `lang/es/validation.php`'s
+  `attributes` array (only `Teacher`'s fields had labels before this pass —
+  every other Academic form's validation errors were silently showing raw
+  camelCase field names like "The document field is required." instead of
+  a Spanish label).
+- **Position/Specialty English demo seed data** (the item explicitly
+  deferred in the 2026-08-20 entry, "Category C"): fixed at the source.
+  `AcademicManagementDemoSeeder` seeded `puestos`/`especialidades` rows in
+  English (`'Professor 2'`, `'Information Systems Engineering'`, …), which
+  render directly as institutional display values with no `__()`
+  translation layer — a real localization bug, not a missing-key one.
+  Inspecting the local dev DB (`gestion_academica_utn`) showed it already
+  held the correct Spanish rows (`'Profesor 2'`, `'Ingeniería en Sistemas
+  de Información'`, …, ids 1-8 for each table) sitting *alongside* the
+  seeder's English duplicates (ids 5-8 / 9-16) — the English rows were
+  pure seeder-created junk, not official schema data. Updated the seeder
+  to the exact Spanish strings already present (so `firstOrCreate` matches
+  existing rows on a fresh run instead of duplicating), then — after
+  confirming zero `docentes.puesto_id` / `atestados.especialidad_id`
+  references to the English rows and getting the user's explicit go-ahead
+  before touching the shared local database — deleted the 4 orphaned
+  Position rows and 8 orphaned Specialty rows.
+- **Technical Note PDF upload re-verification**: re-ran
+  `TechnicalNoteUploadTest` (valid PDF succeeds, missing PDF rejected,
+  non-PDF rejected, oversized rejected, invalid deadline rejected, cancel
+  clears the temp file) unchanged — all six still pass on current HEAD, no
+  regression found, flow left as-is per the batch instruction.
+- Added `tests/Feature/Academic/TeacherAssignmentUiAcceptanceTest.php`
+  (3 focused Livewire-render tests for the three `TeacherAssignmentComponent`
+  UI-copy fixes above, asserting the exact rendered strings via `assertSee`).
+
+### Rejected
+
+- Adding a new DB column/enum for the "Sin catálogo" pending-approval
+  state — the batch explicitly said not to if it's derivable from existing
+  state, and `canDecideNoCatalog` (`result === NoCatalog && !isDecided()`)
+  already derives it correctly.
+- Changing the Technical Note state machine, the affinity matching
+  algorithm, or any DO-02/DO-02a/DO-02b/DO-02d business behavior — out of
+  scope for this batch, none of it was touched.
+- Re-seeding `puestos`/`especialidades` with anything other than the exact
+  strings the local DB already had — inventing new Spanish translations
+  instead would have created a *third* set of near-duplicate rows instead
+  of consolidating on the one already in use.
+
+### Verification
+
+- `php artisan test`: 116 passed / 122 total. The 6 failures (3 filename-
+  slug mismatches, 3 `Spatie\SimpleExcel\SimpleExcelWriter not found`
+  errors) are all in `AffinityCatalogExportTest`/`TeacherAssignmentExportTest`/
+  `TeacherExportTest` and are pre-existing environment issues unrelated to
+  this batch: `.env` has `APP_LOCALE=en` (so `__()`-derived export
+  filenames render in English against Spanish-literal test expectations),
+  and `spatie/simple-excel` is declared in `composer.json`/`composer.lock`
+  but not present in `vendor/` in this sandbox. Neither touched by this
+  batch's diff; not fixed here as it's outside the batch's stated scope.
+- `./vendor/bin/pint --test`: fails on the same 21 pre-existing
+  SIGA-baseline files outside `src/Academic` as the prior audit found —
+  zero files under `src/Academic/**`, `tests/**`, or files touched by this
+  batch fail.
+- `./vendor/bin/phpstan analyse`: produces no output and exits 1 in this
+  sandbox regardless of flags (`--memory-limit`, `--debug`), same as the
+  prior audit's documented finding; `phpstan --version` works, confirming
+  the binary itself is fine. Unverifiable here, not guessed as pass or
+  fail.
+- `npm run build`: succeeds, 24 modules transformed.
+- Browser tooling (`tabs_context_mcp`) was not connected in this
+  environment/session either — verification instead relied on Livewire
+  `assertSee` feature tests against the actual rendered Blade output for
+  all four UI acceptance fixes, which is a more precise (string-exact)
+  check than a visual screenshot would have been for this kind of change.
+
+### Learning
+
+- When an audit says demo seed data is "still English" but a shared local
+  database has already accumulated real Spanish rows alongside it, check
+  the DB before touching the seeder — the fix might be "point the seeder
+  at what's already there and clean up the duplicates it created," not
+  "invent a new translation."
