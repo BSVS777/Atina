@@ -35,10 +35,14 @@
                 <span class="status-badge affinity-matched">{{ __('Atinente') }}</span>
                 @elseif ($row['result'] === 'not_matched')
                 <span class="status-badge affinity-not-matched">{{ __('No Atinente') }}</span>
+                <span style="font-size: 12px; color: var(--textSecondary);">{{ __('Assignment blocked: the teacher does not meet the affinity required for this course.') }}</span>
                 @elseif ($row['result'] === 'technical_note')
                 <span class="status-badge affinity-technical-note">{{ __('Nota técnica') }}</span>
                 @elseif ($row['result'] === 'no_catalog')
                 <span class="status-badge affinity-no-catalog">{{ __('Sin catálogo') }}</span>
+                @if ($row['canDecideNoCatalog'])
+                <span style="font-size: 12px; color: var(--textSecondary);">{{ __('No catalog — pending manual approval') }}</span>
+                @endif
                 @endif
                 @if ($row['isProvisional'])
                 <span class="status-badge system">{{ __('Provisional') }}</span>
@@ -55,9 +59,14 @@
                     @endif
                 </span>
                 @if ($row['note'])
-                <span class="status-badge {{ $row['note']['status'] === 'ratified' ? 'affinity-matched' : ($row['note']['status'] === 'expired' || $row['note']['status'] === 'rejected' ? 'affinity-not-matched' : 'affinity-technical-note') }}">
-                    {{ __('Technical note') }}: {{ __(ucfirst(str_replace('_', ' ', $row['note']['status']))) }} ({{ $row['note']['deadline'] }})
-                </span>
+                    @if ($row['note']['isPending'])
+                    <span class="status-badge affinity-technical-note">{{ __('Technical note — ratification pending from the University Council') }}</span>
+                    <span style="font-size: 12px; color: var(--textSecondary);">{{ __('Deadline: :date', ['date' => $row['note']['deadline']]) }}</span>
+                    @else
+                    <span class="status-badge {{ $row['note']['status'] === 'ratified' ? 'affinity-matched' : 'affinity-not-matched' }}">
+                        {{ __('Technical note') }}: {{ __(ucfirst(str_replace('_', ' ', $row['note']['status']))) }} ({{ $row['note']['deadline'] }})
+                    </span>
+                    @endif
                 @endif
             </span>
             <div class="actions-cell" style="flex-wrap: wrap;">
