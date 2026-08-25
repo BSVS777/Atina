@@ -25,6 +25,8 @@ use Src\Academic\TeacherAssignment\Application\UseCases\RejectTechnicalNoteUseCa
 use Src\Academic\TeacherAssignment\Domain\Entities\TeacherAssignment;
 use Src\Academic\TeacherAssignment\Domain\Entities\TechnicalNote;
 use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidAssignmentTransitionException;
+use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidTechnicalNoteAttachmentException;
+use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidTechnicalNoteDeadlineException;
 use Src\Academic\TeacherAssignment\Domain\VerificationResult;
 use Src\Academic\TeacherAssignment\Presentation\Livewire\Forms\ProposeAssignmentForm;
 use Src\Academic\TeacherAssignment\Presentation\Livewire\Forms\TechnicalNoteForm;
@@ -127,8 +129,12 @@ class TeacherAssignmentComponent extends Component
 
         try {
             $useCase->handle($this->noteForm->toDto((int) $this->activeAssignmentId), auth()->user()?->id);
-        } catch (InvalidAssignmentTransitionException $e) {
+        } catch (InvalidAssignmentTransitionException|InvalidTechnicalNoteAttachmentException $e) {
             $this->addError('noteForm.document', $e->getMessage());
+
+            return;
+        } catch (InvalidTechnicalNoteDeadlineException $e) {
+            $this->addError('noteForm.ratificationDeadline', $e->getMessage());
 
             return;
         }

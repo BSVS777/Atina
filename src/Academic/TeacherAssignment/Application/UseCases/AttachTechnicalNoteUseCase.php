@@ -11,6 +11,8 @@ use Src\Academic\TeacherAssignment\Domain\Contracts\TechnicalNoteRepositoryInter
 use Src\Academic\TeacherAssignment\Domain\Entities\AffinityVerification;
 use Src\Academic\TeacherAssignment\Domain\Entities\TechnicalNote;
 use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidAssignmentTransitionException;
+use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidTechnicalNoteAttachmentException;
+use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidTechnicalNoteDeadlineException;
 use Src\Academic\TeacherAssignment\Domain\TechnicalNoteStatus;
 use Src\Academic\TeacherAssignment\Domain\VerificationResult;
 use Src\Shared\Audit\Domain\Contracts\AuditLogRepositoryInterface;
@@ -25,6 +27,8 @@ use Src\Shared\Audit\Domain\Entities\AuditLogEntry;
 final class AttachTechnicalNoteUseCase
 {
     public const AUDITABLE_TYPE = 'technical_note';
+
+    private const REQUIRED_MIME_TYPE = 'application/pdf';
 
     public function __construct(
         private readonly TechnicalNoteRepositoryInterface $notes,
@@ -44,12 +48,18 @@ final class AttachTechnicalNoteUseCase
             throw InvalidAssignmentTransitionException::technicalNoteAlreadyExists();
         }
 
+        if ($dto->document->mimeType !== self::REQUIRED_MIME_TYPE) {
+            throw InvalidTechnicalNoteAttachmentException::mustBeAPdf($dto->document->mimeType);
+        }
+
+        $ratificationDeadline = $this->parseDeadline($dto->ratificationDeadline);
+
         $note = new TechnicalNote(
             id: null,
             teacherAssignmentId: $dto->teacherAssignmentId,
             documentPath: $dto->document->storagePath,
             submittedByUserId: $actorUserId,
-            ratificationDeadline: new DateTimeImmutable($dto->ratificationDeadline),
+            ratificationDeadline: $ratificationDeadline,
             status: TechnicalNoteStatus::PendingRatification,
             ratifiedAt: null,
         );
@@ -81,5 +91,24 @@ final class AttachTechnicalNoteUseCase
         ));
 
         return $savedNote;
+    }
+
+    private function parseDeadline(string $ratificationDeadline): DateTimeImmutable
+    {
+        if (trim($ratificationDeadline) === '') {
+            throw InvalidTechnicalNoteDeadlineException::required();
+        }
+
+        try {
+            $deadline = new DateTimeImmutable($ratificationDeadline);
+        } catch (\Exception) {
+            throw InvalidTechnicalNoteDeadlineException::required();
+        }
+
+        if ($deadline < new DateTimeImmutable('today')) {
+            throw InvalidTechnicalNoteDeadlineException::mustNotBeInThePast();
+        }
+
+        return $deadline;
     }
 }
