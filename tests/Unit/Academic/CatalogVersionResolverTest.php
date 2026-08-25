@@ -11,6 +11,17 @@ use Src\Academic\AffinityCatalog\Domain\Services\CatalogVersionResolver;
  * DO-02's version-resolution rule (D5/D6, Docs/DIARIO_DECISIONES_IA.md).
  * This is the case the Functionality rubric explicitly uses to
  * distinguish "Excelente" from "Regular" — every branch is covered.
+ *
+ * D5 (no exact/current coverage, but a prior version exists — see
+ * `test_d5_*` below) is **professor-confirmed**: apply the most recent
+ * prior version and mark it provisional.
+ *
+ * D6 (the target date predates every existing version — see
+ * `test_d6_target_date_before_all_versions_applies_the_earliest_as_provisional`)
+ * is a **separate, still-unconfirmed** edge case: whether a future
+ * version may apply retroactively. The professor has not answered this;
+ * the fallback-to-earliest-version behavior below is preserved
+ * unchanged and must not be read as professor-confirmed.
  */
 class CatalogVersionResolverTest extends TestCase
 {
