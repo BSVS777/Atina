@@ -33,6 +33,7 @@ final class EloquentAuditLogRepository implements AuditLogRepositoryInterface
     private const ACTIONS = [
         AuditLogEntry::ACTION_CREATED => 'Creación',
         AuditLogEntry::ACTION_UPDATED => 'Modificación',
+        AuditLogEntry::ACTION_DELETED => 'Eliminación',
     ];
 
     public function record(AuditLogEntry $entry): void

@@ -1,4 +1,17 @@
-<div class="space-y-6">
+<div class="space-y-6" x-data="{
+    confirmDelete: { open: false, step: 'confirm', id: null },
+    askDelete(id) {
+        this.confirmDelete = { open: true, step: 'confirm', id };
+    },
+    runDelete() {
+        $wire.delete(this.confirmDelete.id)
+            .then(() => { this.confirmDelete.step = 'success'; })
+            .catch(() => { this.confirmDelete.open = false; });
+    },
+    closeDeleteModal() {
+        this.confirmDelete.open = false;
+    },
+}">
     <x-ui.data-table
         :headers="[
             ['key' => 'teacher', 'label' => __('Teacher'), 'sortable' => true],
@@ -70,6 +83,11 @@
                 @endif
             </span>
             <div class="actions-cell" style="flex-wrap: wrap;">
+                <x-ui.row-actions
+                    :can-edit="$canEditAssignment && $row['canEditRecord']"
+                    :can-delete="$canDeleteAssignment && $row['canDeleteRecord']"
+                    edit-action="$wire.openEditModal({{ $row['id'] }}, {{ $row['teacherId'] }}, {{ $row['courseGroupId'] }})"
+                    delete-id="{{ $row['id'] }}" />
                 @if ($row['canAttachNote'])
                 <button type="button" class="btn btn-secondary" wire:click="openNoteModal({{ $row['id'] }})">{{ __('Attach technical note') }}</button>
                 @endif
@@ -94,10 +112,12 @@
         @endforelse
     </x-ui.data-table>
 
-    @if ($canPropose)
-    <x-ui.modal :show="$showProposeModal" close-action="closeProposeModal" :title="__('Propose teacher for a group')">
+    @if ($canPropose || $canEditAssignment)
+    <x-ui.modal :show="$showProposeModal" close-action="closeProposeModal" :title="$editingAssignmentId === null ? __('Propose teacher for a group') : __('Edit assignment')">
         <p style="color: var(--textSecondary); margin: 0;">
-            {{ __('Select a teacher and a course group to automatically verify their academic affinity.') }}
+            {{ $editingAssignmentId === null
+                ? __('Select a teacher and a course group to automatically verify their academic affinity.')
+                : __('Correct the teacher or course group for this accidental proposal. Affinity will be re-verified automatically.') }}
         </p>
         <div class="form-field">
             <label for="assignmentTeacher">{{ __('Teacher') }}</label>
@@ -121,9 +141,11 @@
         </div>
         <x-slot:footer>
             <button type="button" class="btn btn-secondary" wire:click="closeProposeModal">{{ __('Cancel') }}</button>
-            <button type="button" class="btn btn-primary" wire:click="propose">{{ __('Verify affinity') }}</button>
+            <button type="button" class="btn btn-primary" wire:click="propose">{{ $editingAssignmentId === null ? __('Verify affinity') : __('Save and re-verify') }}</button>
         </x-slot:footer>
     </x-ui.modal>
+
+    <x-ui.confirm-delete-modal :success-text="__('The assignment has been deleted.')" />
 
     <x-ui.modal :show="$showNoteModal" close-action="closeNoteModal" :title="__('Attach technical note (DO-02b)')">
         <p style="margin-bottom: 1rem; color: var(--textSecondary);">

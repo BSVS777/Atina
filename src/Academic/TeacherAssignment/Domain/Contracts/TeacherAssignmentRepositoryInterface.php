@@ -16,4 +16,6 @@ interface TeacherAssignmentRepositoryInterface
     public function all(): array;
 
     public function save(TeacherAssignment $assignment): TeacherAssignment;
+
+    public function delete(int $id): void;
 }

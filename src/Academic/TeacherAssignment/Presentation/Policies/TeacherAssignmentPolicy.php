@@ -25,6 +25,27 @@ class TeacherAssignmentPolicy
         return $user->hasPermissionTo('atinencia.verificar');
     }
 
+    /**
+     * Correcting a misclicked teacher/course-group is part of the same
+     * verification workflow as proposing one — see
+     * EditTeacherAssignmentUseCase.
+     */
+    public function update(User $user): bool
+    {
+        return $user->hasPermissionTo('atinencia.verificar');
+    }
+
+    /**
+     * Removing an accidental proposal is likewise part of
+     * `atinencia.verificar` — DeleteTeacherAssignmentUseCase still blocks
+     * the operation server-side once formal history depends on the
+     * record, regardless of this permission.
+     */
+    public function delete(User $user): bool
+    {
+        return $user->hasPermissionTo('atinencia.verificar');
+    }
+
     public function exportPdf(User $user): bool
     {
         return $user->hasPermissionTo('atinencia.verificar');

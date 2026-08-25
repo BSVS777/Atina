@@ -15,6 +15,13 @@ class ProposeAssignmentForm extends Form
     public ?int $courseGroupId = null;
 
     /**
+     * Set by TeacherAssignmentComponent::openEditModal() so the unique
+     * rule below ignores the record being edited instead of rejecting it
+     * against itself. Left null for a brand-new proposal.
+     */
+    public ?int $editingAssignmentId = null;
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array
@@ -25,7 +32,9 @@ class ProposeAssignmentForm extends Form
                 'required',
                 'integer',
                 'exists:grupos,id',
-                Rule::unique('asignaciones_docentes', 'grupo_id')->where('docente_id', $this->teacherId),
+                Rule::unique('asignaciones_docentes', 'grupo_id')
+                    ->where('docente_id', $this->teacherId)
+                    ->ignore($this->editingAssignmentId),
             ],
         ];
     }

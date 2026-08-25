@@ -2837,3 +2837,146 @@ using anything browser-specific to begin with. Also: DOMPDF's
 pure PHP can't" case that's easy to miss during inspection unless the
 template is actually rendered and compared, not just read — the base64
 font/image payloads look identical in the source either way.
+
+---
+
+## 2026-08-25 — Corrective Edit/Delete for Verificación de Atinencias
+
+### AI consultation
+
+The user asked for a small UX correction: let an authorized user fix an
+accidental (misclicked) teacher-assignment/affinity-verification record
+from the Verificación de Atinencias screen — Edit (correct the
+teacher/course-group, then rerun the real verification) and Delete
+(remove a plain accidental record) — without ever letting the computed
+result (Atinente / No Atinente / Nota técnica / Sin catálogo) be set by
+hand, and without silently destroying formal history (a Technical Note
+carrying the Consejo Universitario's ratification/rejection, or a manual
+"Sin catálogo" decision).
+
+### Accepted
+
+- **What "protected history" means, operationalized.** The SRS/DB only
+  gave qualitative guidance ("don't destroy dependent formal
+  decisions"). Inspecting the existing state machine
+  (`ProposeTeacherAssignmentUseCase`, `DecideNoCatalogAssignmentUseCase`,
+  `AttachTechnicalNoteUseCase`) showed exactly two things create formal,
+  human-made history on a `TeacherAssignment`: a `TechnicalNote` row
+  (any status — pending/ratified/rejected/expired all carry Council
+  history) and a manual "Sin catálogo" decision (`DecideNoCatalogAssignmentUseCase`
+  ran, i.e. the latest verification is `NoCatalog` *and* the assignment
+  is already decided). An auto-confirmed "Atinente" match is business-rule
+  output, not a human decision, so it stays correctable. Encoded this
+  once as `AssignmentOverview::hasProtectedHistory()` and reused it from
+  both new use cases and the row-level UI hints, so the guard can't drift
+  between places.
+- **Reused the matching algorithm instead of duplicating it.** The
+  instruction to "not duplicate the matching algorithm inside the
+  component" implied the deeper problem: `ProposeTeacherAssignmentUseCase`
+  had the DO-02a catalog-resolution + credential-matching logic inlined.
+  Extracted it into `RunAffinityVerificationUseCase`, which both
+  `ProposeTeacherAssignmentUseCase` (new assignment) and the new
+  `EditTeacherAssignmentUseCase` (corrected teacher/group on an existing
+  one) call — a real reduction in duplication, not abstraction for its
+  own sake.
+- **Edit never overwrites verification history.** `EditTeacherAssignmentUseCase`
+  resets the assignment to `Proposed`, updates the same
+  `asignaciones_docentes` row's `grupo_id`/`docente_id` in place, then
+  reruns `RunAffinityVerificationUseCase`, which *appends* a new
+  `verificaciones_atinencia` row — consistent with the existing D11/D12
+  append-only trail rule. The catalog-derived fields (Atinente/No
+  Atinente/Nota técnica/Sin catálogo, catalog version, provisional flag)
+  stay entirely computed; only `teacherId`/`courseGroupId` are
+  user-editable, matching the current model's actual user-entered
+  fields.
+- **Delete cascades the verification trail, not more.** Once
+  `DeleteTeacherAssignmentUseCase` clears the protected-history guard, it
+  deletes the `asignaciones_docentes` row and relies on the existing DB
+  `cascadeOnDelete` on `verificaciones_atinencia.asignacion_docente_id`
+  to remove that assignment's verification trail — the trail belongs to
+  the same accidental record. `notas_tecnicas` is also `cascadeOnDelete`
+  at the DB level, but the guard means that path is never actually
+  reached (a note always blocks deletion first).
+- **Audit: added `ACTION_DELETED`, reused the existing schema.** The
+  professor-provided `auditorias.accion` enum already included
+  `'Eliminación'` (unused until now) — added
+  `AuditLogEntry::ACTION_DELETED = 'deleted'` and mapped it in
+  `EloquentAuditLogRepository::ACTIONS`, no migration needed.
+- **Authorization: reused `atinencia.verificar`**, the same permission
+  already gating propose/decide on this screen (Administrador +
+  Coordinadora de Docencia), added as `TeacherAssignmentPolicy::update()`/
+  `::delete()`. No new permission row, no role/email hardcoding.
+- **UI: reused `<x-ui.row-actions>` + `<x-ui.confirm-delete-modal>`**,
+  the same components `RoleComponent`/`PermissionComponent` already use
+  for their edit/delete affordances, and reused the existing propose
+  modal/form (`ProposeAssignmentForm` gained one `editingAssignmentId`
+  property, used only to `Rule::unique(...)->ignore()` the record being
+  edited) rather than building a second form.
+
+### Rejected
+
+- A new granular permission (e.g. `atinencia.editar`/`atinencia.eliminar`) —
+  the task said to reuse existing policies where they can express the
+  rule, and `atinencia.verificar` already exactly covers "who may act on
+  a verification record" for this screen.
+- Blocking edit/delete on *any* `isDecided()` assignment — an
+  auto-confirmed "Atinente" match has no separate dependent record and
+  no human formal decision behind it, so blocking it would refuse a
+  legitimate misclick correction (e.g. a Matched result for the wrong
+  teacher) for no protective benefit.
+- A client-only "hide the button" fix — both use cases enforce the
+  protected-history guard server-side regardless of the row's
+  `canEditRecord`/`canDeleteRecord` UI hint, per the explicit "never rely
+  only on hiding buttons" instruction.
+- Live browser verification against this checkout's configured database —
+  `.env` points at the real institutional MySQL schema
+  (`gestion_academica_utn`), not an isolated test DB, and no seeded admin
+  login exists. Given the delete path is destructive, verified end-to-end
+  through the full automated suite (Livewire component tests exercising
+  the actual `openEditModal`/`propose`/`delete` methods) instead of
+  creating/deleting real rows in that database.
+
+### Corrections
+
+None — no rework was needed mid-implementation; the guard logic and the
+shared-verification extraction were both correct on the first pass
+against the existing test suite.
+
+### Verification
+
+- New file `tests/Feature/Academic/TeacherAssignmentEditDeleteTest.php`:
+  **10/10 passing**, 26 assertions — edit reruns the real matching
+  algorithm (asserts the *previous* "No Atinente" verification row is
+  preserved and a *new* "Atinente" row is appended, not that the result
+  was set directly); edit/delete both require `atinencia.verificar`
+  (`assertForbidden` otherwise); edit and delete are both blocked once a
+  Technical Note exists or a manual "Sin catálogo" decision was made
+  (record/status unchanged, `danger` toast dispatched); an
+  auto-confirmed "Atinente" match and an undecided "Sin catálogo"
+  proposal both remain deletable; deletion is recorded in `auditorias`
+  with `accion = 'Eliminación'`; the pre-existing Technical Note
+  ratification-pending UI flow still renders correctly.
+- `php artisan test`: **224/224 passing**, 517 assertions (whole suite,
+  up from the prior 214-test baseline — no regressions).
+- `./vendor/bin/phpstan analyse --memory-limit=1G`: 0 errors (whole
+  repo).
+- `./vendor/bin/pint --test`: every file touched this pass is clean;
+  scoped run over `src/Academic/TeacherAssignment`, `src/Shared/Audit`,
+  and the new test file reports 0 findings (the whole-repo run still
+  fails only on the same pre-existing baseline files every prior batch
+  has already reported, none touched here).
+- `npm run typecheck`: 0 errors. `npm run build`: succeeds.
+
+### Learning
+
+A "safe correction" feature is really a state-machine-completeness
+question: the actual design work here was reading
+`ProposeTeacherAssignmentUseCase`/`DecideNoCatalogAssignmentUseCase`/
+`AttachTechnicalNoteUseCase` closely enough to enumerate every way this
+aggregate can acquire history a human would recognize as "formal," then
+encoding that enumeration in exactly one place
+(`AssignmentOverview::hasProtectedHistory()`) so the create-time UI
+hints and the two new use cases' server-side guards structurally cannot
+disagree. It also surfaced a duplication `git blame` wouldn't have shown
+directly — the matching algorithm only *looked* like it belonged to
+"propose" until a second caller (edit) needed the identical logic.

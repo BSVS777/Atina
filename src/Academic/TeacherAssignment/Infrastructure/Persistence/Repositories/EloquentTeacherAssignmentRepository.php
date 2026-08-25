@@ -44,6 +44,11 @@ final class EloquentTeacherAssignmentRepository implements TeacherAssignmentRepo
         return $this->toDomain($model);
     }
 
+    public function delete(int $id): void
+    {
+        TeacherAssignmentModel::query()->whereKey($id)->delete();
+    }
+
     private function toDomain(TeacherAssignmentModel $model): TeacherAssignment
     {
         return new TeacherAssignment(

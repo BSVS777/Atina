@@ -18,6 +18,8 @@ use Livewire\WithFileUploads;
 use Src\Academic\TeacherAssignment\Application\DTOs\AssignmentOverview;
 use Src\Academic\TeacherAssignment\Application\UseCases\AttachTechnicalNoteUseCase;
 use Src\Academic\TeacherAssignment\Application\UseCases\DecideNoCatalogAssignmentUseCase;
+use Src\Academic\TeacherAssignment\Application\UseCases\DeleteTeacherAssignmentUseCase;
+use Src\Academic\TeacherAssignment\Application\UseCases\EditTeacherAssignmentUseCase;
 use Src\Academic\TeacherAssignment\Application\UseCases\ListTeacherAssignmentsUseCase;
 use Src\Academic\TeacherAssignment\Application\UseCases\ProposeTeacherAssignmentUseCase;
 use Src\Academic\TeacherAssignment\Application\UseCases\RatifyTechnicalNoteUseCase;
@@ -69,6 +71,14 @@ class TeacherAssignmentComponent extends Component
 
     public ?int $activeAssignmentId = null;
 
+    /**
+     * Null while proposing a brand-new assignment; set to the row's id by
+     * openEditModal() so propose() knows to call EditTeacherAssignmentUseCase
+     * instead of ProposeTeacherAssignmentUseCase against the same reused
+     * $proposeForm/modal.
+     */
+    public ?int $editingAssignmentId = null;
+
     public ProposeAssignmentForm $proposeForm;
 
     public TechnicalNoteForm $noteForm;
@@ -77,7 +87,27 @@ class TeacherAssignmentComponent extends Component
     {
         $this->authorize('create', TeacherAssignment::class);
 
+        $this->editingAssignmentId = null;
         $this->proposeForm->reset();
+        $this->resetValidation();
+        $this->showProposeModal = true;
+    }
+
+    /**
+     * Corrective UX: reuses the propose modal/form to let an authorized
+     * user fix a misclicked teacher/course-group on an accidental
+     * proposal — propose() reruns the affinity verification instead of
+     * letting the result be set by hand.
+     */
+    public function openEditModal(int $assignmentId, int $teacherId, int $courseGroupId): void
+    {
+        $this->authorize('update', TeacherAssignment::class);
+
+        $this->editingAssignmentId = $assignmentId;
+        $this->proposeForm->reset();
+        $this->proposeForm->teacherId = $teacherId;
+        $this->proposeForm->courseGroupId = $courseGroupId;
+        $this->proposeForm->editingAssignmentId = $assignmentId;
         $this->resetValidation();
         $this->showProposeModal = true;
     }
@@ -85,23 +115,57 @@ class TeacherAssignmentComponent extends Component
     public function closeProposeModal(): void
     {
         $this->showProposeModal = false;
+        $this->editingAssignmentId = null;
     }
 
-    public function propose(ProposeTeacherAssignmentUseCase $useCase): void
+    public function propose(ProposeTeacherAssignmentUseCase $proposeUseCase, EditTeacherAssignmentUseCase $editUseCase): void
     {
-        $this->authorize('create', TeacherAssignment::class);
+        $this->authorize($this->editingAssignmentId === null ? 'create' : 'update', TeacherAssignment::class);
         $this->proposeForm->validate();
 
         /** @var CourseGroup $group */
         $group = CourseGroup::query()->with('academicTerm')->findOrFail($this->proposeForm->courseGroupId);
+        $dto = $this->proposeForm->toDto($group->course_id, $group->academicTerm->start_date->toDateString());
 
-        $useCase->handle(
-            $this->proposeForm->toDto($group->course_id, $group->academicTerm->start_date->toDateString()),
-            auth()->user()?->id,
-        );
+        if ($this->editingAssignmentId === null) {
+            $proposeUseCase->handle($dto, auth()->user()?->id);
+            $this->dispatch('toast', variant: 'success', text: __('Verification executed.'));
+        } else {
+            try {
+                $editUseCase->handle($this->editingAssignmentId, $dto, auth()->user()?->id);
+            } catch (InvalidAssignmentTransitionException $e) {
+                $this->addError('proposeForm.courseGroupId', $e->getMessage());
+
+                return;
+            }
+
+            $this->dispatch('toast', variant: 'success', text: __('Assignment updated — affinity re-verified.'));
+        }
 
         $this->showProposeModal = false;
-        $this->dispatch('toast', variant: 'success', text: __('Verification executed.'));
+        $this->editingAssignmentId = null;
+    }
+
+    /**
+     * Corrective UX: deletes an accidental proposal/verification.
+     * DeleteTeacherAssignmentUseCase still blocks the operation
+     * server-side when the record has protected history (a Technical
+     * Note or a manual "Sin catálogo" decision), regardless of the
+     * canDelete row flag hiding the button in the UI.
+     */
+    public function delete(int $id, DeleteTeacherAssignmentUseCase $useCase): void
+    {
+        $this->authorize('delete', TeacherAssignment::class);
+
+        try {
+            $useCase->handle($id, auth()->user()?->id);
+        } catch (InvalidAssignmentTransitionException $e) {
+            $this->dispatch('toast', variant: 'danger', text: $e->getMessage());
+
+            return;
+        }
+
+        $this->dispatch('toast', variant: 'success', text: __('Assignment deleted.'));
     }
 
     public function openNoteModal(int $assignmentId): void
@@ -222,6 +286,8 @@ class TeacherAssignmentComponent extends Component
             'canPropose' => auth()->user()->can('create', TeacherAssignment::class),
             'canDecide' => auth()->user()->can('decide', TeacherAssignment::class),
             'canApproveNote' => auth()->user()->can('approve', TechnicalNote::class),
+            'canEditAssignment' => auth()->user()->can('update', TeacherAssignment::class),
+            'canDeleteAssignment' => auth()->user()->can('delete', TeacherAssignment::class),
         ])->layout('components.layouts.dashboard', [
             'title' => __('Teaching Affinity Verification'),
             'subtitle' => __('Propose teachers for course groups and resolve exceptional cases'),
@@ -246,12 +312,21 @@ class TeacherAssignmentComponent extends Component
 
         return [
             'id' => $assignment->id(),
+            'teacherId' => $assignment->teacherId(),
+            'courseGroupId' => $assignment->courseGroupId(),
             'teacher' => $teacherNames->get($assignment->teacherId(), '—'),
             'group' => $groupLabels->get($assignment->courseGroupId(), '—'),
             'status' => $assignment->status()->value,
             'result' => $verification?->result()->value,
             'isProvisional' => $verification?->isProvisional() ?? false,
             'catalogCitation' => $catalogCitation,
+            // Edit/Delete are correction paths for accidental entries only
+            // — blocked once formal history (a Technical Note or a manual
+            // "Sin catálogo" decision) depends on the record. Hides the
+            // buttons; DeleteTeacherAssignmentUseCase/EditTeacherAssignmentUseCase
+            // enforce the same rule server-side regardless of this flag.
+            'canEditRecord' => ! $overview->hasProtectedHistory(),
+            'canDeleteRecord' => ! $overview->hasProtectedHistory(),
             // Export-only: prefers the verification's free-text justification
             // (e.g. a "Sin catálogo" manual decision) over the catalog
             // citation when both exist; the on-screen table never reads this.

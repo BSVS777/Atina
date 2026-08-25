@@ -16,6 +16,8 @@ final class AuditLogEntry
 
     public const ACTION_UPDATED = 'updated';
 
+    public const ACTION_DELETED = 'deleted';
+
     /**
      * @param  array<string, array{before: mixed, after: mixed}>  $changes
      */

@@ -32,4 +32,19 @@ final class InvalidAssignmentTransitionException extends RuntimeException
     {
         return new self('Only a Technical Note pending ratification can be ratified, rejected, or expired.');
     }
+
+    public static function assignmentNotFound(): self
+    {
+        return new self('The teacher assignment was not found.');
+    }
+
+    public static function editBlockedByProtectedHistory(): self
+    {
+        return new self('This assignment cannot be edited: it already has a Technical Note or a manual "Sin catálogo" decision — protected history cannot be silently changed.');
+    }
+
+    public static function deletionBlockedByProtectedHistory(): self
+    {
+        return new self('This assignment cannot be deleted: it already has a Technical Note or a manual "Sin catálogo" decision — protected history cannot be silently destroyed.');
+    }
 }
