@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Src\Academic\AcademicCredential\Infrastructure\Persistence\Repositories;
 
 use App\Models\AcademicCredential as AcademicCredentialModel;
+use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
-use Src\Academic\AcademicCredential\Domain\YearObtained;
+use Src\Academic\AcademicCredential\Domain\StudyPeriod;
 use Src\Academic\AcademicCredential\Infrastructure\Persistence\Casts\DegreeLevelCast;
 
 /**
@@ -31,7 +32,7 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
         /** @var Collection<int, AcademicCredentialModel> $models */
         $models = AcademicCredentialModel::query()
             ->where('docente_id', $teacherId)
-            ->orderBy('anio_obtencion', 'desc')
+            ->orderBy('fecha_fin', 'desc')
             ->get();
 
         return $models->map($this->toDomain(...))->all();
@@ -62,7 +63,8 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
             'especialidad_id' => $credential->specialtyId(),
             'grado' => $credential->degreeLevel(),
             'institucion' => $credential->institution(),
-            'anio_obtencion' => $credential->yearObtained()->value(),
+            'fecha_inicio' => $credential->studyPeriod()->startDate()->format('Y-m-d'),
+            'fecha_fin' => $credential->studyPeriod()->endDate()->format('Y-m-d'),
         ]);
         $model->save();
 
@@ -77,7 +79,10 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
             specialtyId: $model->especialidad_id,
             degreeLevel: $model->grado,
             institution: $model->institucion,
-            yearObtained: new YearObtained($model->anio_obtencion),
+            studyPeriod: new StudyPeriod(
+                new DateTimeImmutable($model->fecha_inicio->format('Y-m-d')),
+                new DateTimeImmutable($model->fecha_fin->format('Y-m-d')),
+            ),
         );
     }
 }

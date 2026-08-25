@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Infrastructure\Persistence\Casts\DegreeLevelCast;
 
@@ -23,11 +24,12 @@ use Src\Academic\AcademicCredential\Infrastructure\Persistence\Casts\DegreeLevel
  * @property int $especialidad_id
  * @property DegreeLevel $grado
  * @property string $institucion
- * @property int $anio_obtencion
+ * @property Carbon $fecha_inicio
+ * @property Carbon $fecha_fin
  * @property-read Teacher $teacher
  * @property-read Specialty $specialty
  */
-#[Fillable(['docente_id', 'especialidad_id', 'grado', 'institucion', 'anio_obtencion'])]
+#[Fillable(['docente_id', 'especialidad_id', 'grado', 'institucion', 'fecha_inicio', 'fecha_fin'])]
 class AcademicCredential extends Model
 {
     /** @use HasFactory<AcademicCredentialFactory> */
@@ -39,7 +41,8 @@ class AcademicCredential extends Model
     {
         return [
             'grado' => DegreeLevelCast::class,
-            'anio_obtencion' => 'integer',
+            'fecha_inicio' => 'date',
+            'fecha_fin' => 'date',
         ];
     }
 

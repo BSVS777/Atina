@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Academic\AcademicCredential\Application\DTOs;
 
+use DateTimeImmutable;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 
 final class AcademicCredentialDTO
@@ -13,6 +14,7 @@ final class AcademicCredentialDTO
         public readonly int $specialtyId,
         public readonly DegreeLevel $degreeLevel,
         public readonly string $institution,
-        public readonly int $yearObtained,
+        public readonly DateTimeImmutable $startDate,
+        public readonly DateTimeImmutable $endDate,
     ) {}
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Academic;
 
+use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 use Src\Academic\AcademicCredential\Application\DTOs\AcademicCredentialDTO;
 use Src\Academic\AcademicCredential\Application\UseCases\EditAcademicCredentialUseCase;
@@ -51,8 +52,9 @@ class EditAcademicCredentialUseCaseTest extends TestCase
             teacherId: $created->teacherId(),
             specialtyId: $created->specialtyId(),
             degreeLevel: $created->degreeLevel(),
-            institution: 'University of Costa Rica',
-            yearObtained: $created->yearObtained()->value(),
+            institution: 'Universidad de Costa Rica',
+            startDate: $created->studyPeriod()->startDate(),
+            endDate: $created->studyPeriod()->endDate(),
         );
 
         $this->editUseCase->handle($created->id(), $changed, actorUserId: 2);
@@ -63,8 +65,8 @@ class EditAcademicCredentialUseCaseTest extends TestCase
         $editEntry = $entries[1];
         $this->assertSame(AuditLogEntry::ACTION_UPDATED, $editEntry->action());
         $this->assertSame(['institution'], array_keys($editEntry->changes()));
-        $this->assertSame('National Technical University', $editEntry->changes()['institution']['before']);
-        $this->assertSame('University of Costa Rica', $editEntry->changes()['institution']['after']);
+        $this->assertSame('Universidad Técnica Nacional', $editEntry->changes()['institution']['before']);
+        $this->assertSame('Universidad de Costa Rica', $editEntry->changes()['institution']['after']);
     }
 
     public function test_rejects_editing_into_a_duplicate_combination(): void
@@ -74,8 +76,9 @@ class EditAcademicCredentialUseCaseTest extends TestCase
             teacherId: $first->teacherId(),
             specialtyId: 2,
             degreeLevel: DegreeLevel::Master,
-            institution: 'University of Costa Rica',
-            yearObtained: 2018,
+            institution: 'Universidad de Costa Rica',
+            startDate: new DateTimeImmutable('2013-03-01'),
+            endDate: new DateTimeImmutable('2018-11-30'),
         ), actorUserId: 1);
 
         $this->expectException(DuplicateCredentialException::class);
@@ -96,8 +99,9 @@ class EditAcademicCredentialUseCaseTest extends TestCase
             teacherId: 1,
             specialtyId: 1,
             degreeLevel: DegreeLevel::Bachelor,
-            institution: 'National Technical University',
-            yearObtained: 2015,
+            institution: 'Universidad Técnica Nacional',
+            startDate: new DateTimeImmutable('2010-03-01'),
+            endDate: new DateTimeImmutable('2015-11-30'),
         );
     }
 }

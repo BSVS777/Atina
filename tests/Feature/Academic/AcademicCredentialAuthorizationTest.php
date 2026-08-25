@@ -39,7 +39,8 @@ class AcademicCredentialAuthorizationTest extends TestCase
             ->set('form.specialtyId', $specialty->id)
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'UTN')
-            ->set('form.yearObtained', 2020)
+            ->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
             ->call('save')
             ->assertForbidden();
 
@@ -57,7 +58,8 @@ class AcademicCredentialAuthorizationTest extends TestCase
             ->set('form.specialtyId', $specialty->id)
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'UTN')
-            ->set('form.yearObtained', 2020)
+            ->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
             ->call('save')
             ->assertHasNoErrors();
 

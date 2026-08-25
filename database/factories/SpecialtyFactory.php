@@ -18,14 +18,14 @@ class SpecialtyFactory extends Factory
         // Specialty::inRandomOrder()->value('id') and only create when none exist.
         return [
             'name' => fake()->unique()->randomElement([
-                'Information Systems Engineering',
-                'Computer Engineering',
-                'Business Administration',
-                'Industrial Engineering',
-                'Public Accounting',
-                'Education Sciences with English Emphasis',
-                'Environmental Engineering',
-                'Food Engineering',
+                'Ingeniería en Sistemas de Información',
+                'Ingeniería en Computación',
+                'Administración de Empresas',
+                'Ingeniería Industrial',
+                'Contaduría Pública',
+                'Ciencias de la Educación con énfasis en Inglés',
+                'Ingeniería Ambiental',
+                'Ingeniería en Alimentos',
             ]),
         ];
     }

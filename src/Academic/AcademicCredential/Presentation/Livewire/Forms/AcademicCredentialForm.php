@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Academic\AcademicCredential\Presentation\Livewire\Forms;
 
+use DateTimeImmutable;
 use Illuminate\Validation\Rule;
 use Livewire\Form;
 use Src\Academic\AcademicCredential\Application\DTOs\AcademicCredentialDTO;
@@ -18,7 +19,9 @@ class AcademicCredentialForm extends Form
 
     public string $institution = '';
 
-    public ?int $yearObtained = null;
+    public string $startDate = '';
+
+    public string $endDate = '';
 
     /**
      * @return array<string, mixed>
@@ -28,8 +31,22 @@ class AcademicCredentialForm extends Form
         return [
             'specialtyId' => ['required', 'integer', 'exists:especialidades,id'],
             'degreeLevel' => ['required', Rule::enum(DegreeLevel::class)],
-            'institution' => ['required', 'string', 'max:150'],
-            'yearObtained' => ['required', 'integer', 'min:1950', 'max:'.date('Y')],
+            'institution' => ['required', 'string', 'max:150', 'regex:/\p{L}/u'],
+            'startDate' => ['required', 'date', 'after_or_equal:1950-01-01', 'before_or_equal:endDate'],
+            'endDate' => ['required', 'date', 'after_or_equal:startDate', 'before_or_equal:today'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'institution.regex' => __('The institution must contain letters, not only numbers.'),
+            'startDate.before_or_equal' => __('The start date must be before or the same as the end date.'),
+            'endDate.after_or_equal' => __('The end date must be after or the same as the start date.'),
+            'endDate.before_or_equal' => __('The end date cannot be in the future.'),
         ];
     }
 
@@ -38,7 +55,8 @@ class AcademicCredentialForm extends Form
         $this->specialtyId = $credential->specialtyId();
         $this->degreeLevel = $credential->degreeLevel()->value;
         $this->institution = $credential->institution();
-        $this->yearObtained = $credential->yearObtained()->value();
+        $this->startDate = $credential->studyPeriod()->startDate()->format('Y-m-d');
+        $this->endDate = $credential->studyPeriod()->endDate()->format('Y-m-d');
     }
 
     public function toDto(int $teacherId): AcademicCredentialDTO
@@ -48,7 +66,8 @@ class AcademicCredentialForm extends Form
             specialtyId: (int) $this->specialtyId,
             degreeLevel: DegreeLevel::from($this->degreeLevel),
             institution: $this->institution,
-            yearObtained: (int) $this->yearObtained,
+            startDate: new DateTimeImmutable($this->startDate),
+            endDate: new DateTimeImmutable($this->endDate),
         );
     }
 }

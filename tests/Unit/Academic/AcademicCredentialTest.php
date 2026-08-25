@@ -2,11 +2,12 @@
 
 namespace Tests\Unit\Academic;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
-use Src\Academic\AcademicCredential\Domain\YearObtained;
+use Src\Academic\AcademicCredential\Domain\StudyPeriod;
 
 class AcademicCredentialTest extends TestCase
 {
@@ -27,12 +28,13 @@ class AcademicCredentialTest extends TestCase
         $this->assertSame(1, $persisted->teacherId());
         $this->assertSame(10, $persisted->specialtyId());
         $this->assertSame(DegreeLevel::Master, $persisted->degreeLevel());
-        $this->assertSame('National Technical University', $persisted->institution());
-        $this->assertSame(2015, $persisted->yearObtained()->value());
+        $this->assertSame('Universidad Técnica Nacional', $persisted->institution());
+        $this->assertSame('2010-03-01', $persisted->studyPeriod()->startDate()->format('Y-m-d'));
+        $this->assertSame('2015-11-30', $persisted->studyPeriod()->endDate()->format('Y-m-d'));
         $this->assertNull($credential->id(), 'withId() must not mutate the original instance.');
     }
 
-    private function credential(string $institution = 'National Technical University'): AcademicCredential
+    private function credential(string $institution = 'Universidad Técnica Nacional'): AcademicCredential
     {
         return new AcademicCredential(
             id: null,
@@ -40,7 +42,10 @@ class AcademicCredentialTest extends TestCase
             specialtyId: 10,
             degreeLevel: DegreeLevel::Master,
             institution: $institution,
-            yearObtained: new YearObtained(2015),
+            studyPeriod: new StudyPeriod(
+                new DateTimeImmutable('2010-03-01'),
+                new DateTimeImmutable('2015-11-30'),
+            ),
         );
     }
 }

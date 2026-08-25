@@ -9,7 +9,7 @@ use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositor
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 use Src\Academic\AcademicCredential\Domain\Exceptions\CredentialNotFoundException;
 use Src\Academic\AcademicCredential\Domain\Exceptions\DuplicateCredentialException;
-use Src\Academic\AcademicCredential\Domain\YearObtained;
+use Src\Academic\AcademicCredential\Domain\StudyPeriod;
 use Src\Shared\Audit\Domain\Contracts\AuditLogRepositoryInterface;
 use Src\Shared\Audit\Domain\Entities\AuditLogEntry;
 
@@ -46,7 +46,7 @@ final class EditAcademicCredentialUseCase
             specialtyId: $dto->specialtyId,
             degreeLevel: $dto->degreeLevel,
             institution: $dto->institution,
-            yearObtained: new YearObtained($dto->yearObtained),
+            studyPeriod: new StudyPeriod($dto->startDate, $dto->endDate),
         );
         $saved = $this->repository->save($updated);
 
@@ -82,8 +82,12 @@ final class EditAcademicCredentialUseCase
             $changes['institution'] = ['before' => $existing->institution(), 'after' => $dto->institution];
         }
 
-        if ($existing->yearObtained()->value() !== $dto->yearObtained) {
-            $changes['year_obtained'] = ['before' => $existing->yearObtained()->value(), 'after' => $dto->yearObtained];
+        if ($existing->studyPeriod()->startDate()->format('Y-m-d') !== $dto->startDate->format('Y-m-d')) {
+            $changes['start_date'] = ['before' => $existing->studyPeriod()->startDate()->format('Y-m-d'), 'after' => $dto->startDate->format('Y-m-d')];
+        }
+
+        if ($existing->studyPeriod()->endDate()->format('Y-m-d') !== $dto->endDate->format('Y-m-d')) {
+            $changes['end_date'] = ['before' => $existing->studyPeriod()->endDate()->format('Y-m-d'), 'after' => $dto->endDate->format('Y-m-d')];
         }
 
         return $changes;

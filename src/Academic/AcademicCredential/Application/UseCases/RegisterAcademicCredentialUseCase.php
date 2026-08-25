@@ -8,7 +8,7 @@ use Src\Academic\AcademicCredential\Application\DTOs\AcademicCredentialDTO;
 use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 use Src\Academic\AcademicCredential\Domain\Exceptions\DuplicateCredentialException;
-use Src\Academic\AcademicCredential\Domain\YearObtained;
+use Src\Academic\AcademicCredential\Domain\StudyPeriod;
 use Src\Shared\Audit\Domain\Contracts\AuditLogRepositoryInterface;
 use Src\Shared\Audit\Domain\Entities\AuditLogEntry;
 
@@ -37,7 +37,7 @@ final class RegisterAcademicCredentialUseCase
             specialtyId: $dto->specialtyId,
             degreeLevel: $dto->degreeLevel,
             institution: $dto->institution,
-            yearObtained: new YearObtained($dto->yearObtained),
+            studyPeriod: new StudyPeriod($dto->startDate, $dto->endDate),
         );
 
         $saved = $this->repository->save($credential);
@@ -52,7 +52,8 @@ final class RegisterAcademicCredentialUseCase
                 'specialty_id' => ['before' => null, 'after' => $dto->specialtyId],
                 'degree_level' => ['before' => null, 'after' => $dto->degreeLevel->value],
                 'institution' => ['before' => null, 'after' => $dto->institution],
-                'year_obtained' => ['before' => null, 'after' => $dto->yearObtained],
+                'start_date' => ['before' => null, 'after' => $dto->startDate->format('Y-m-d')],
+                'end_date' => ['before' => null, 'after' => $dto->endDate->format('Y-m-d')],
             ],
         ));
 

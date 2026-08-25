@@ -94,7 +94,8 @@ class AffinityDemoSeeder extends Seeder
             'especialidad_id' => $softwareSpecialty->id,
             'grado' => DegreeLevel::Licentiate,
             'institucion' => 'Universidad Técnica Nacional',
-            'anio_obtencion' => 2018,
+            'fecha_inicio' => '2013-03-01',
+            'fecha_fin' => '2018-12-15',
         ]);
 
         $nonMatchingTeacher = Teacher::factory()->create();
@@ -103,7 +104,8 @@ class AffinityDemoSeeder extends Seeder
             'especialidad_id' => $unrelatedSpecialty->id,
             'grado' => DegreeLevel::Bachelor,
             'institucion' => 'Universidad de Costa Rica',
-            'anio_obtencion' => 2015,
+            'fecha_inicio' => '2010-03-01',
+            'fecha_fin' => '2015-12-15',
         ]);
 
         $noCatalogTeacher = Teacher::factory()->create();
@@ -112,7 +114,8 @@ class AffinityDemoSeeder extends Seeder
             'especialidad_id' => $softwareSpecialty->id,
             'grado' => DegreeLevel::Master,
             'institucion' => 'Instituto Tecnológico de Costa Rica',
-            'anio_obtencion' => 2020,
+            'fecha_inicio' => '2016-03-01',
+            'fecha_fin' => '2020-12-15',
         ]);
 
         /** @var ProposeTeacherAssignmentUseCase $propose */

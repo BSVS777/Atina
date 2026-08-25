@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Academic;
 
+use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 use Src\Academic\AcademicCredential\Application\DTOs\AcademicCredentialDTO;
 use Src\Academic\AcademicCredential\Application\UseCases\RegisterAcademicCredentialUseCase;
@@ -57,8 +58,9 @@ class RegisterAcademicCredentialUseCaseTest extends TestCase
             teacherId: 1,
             specialtyId: 1,
             degreeLevel: DegreeLevel::Bachelor,
-            institution: 'National Technical University',
-            yearObtained: 2015,
+            institution: 'Universidad Técnica Nacional',
+            startDate: new DateTimeImmutable('2010-03-01'),
+            endDate: new DateTimeImmutable('2015-11-30'),
         );
     }
 }

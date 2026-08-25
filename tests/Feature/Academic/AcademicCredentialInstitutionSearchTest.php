@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Academic;
 
-use App\Models\AcademicCredential;
 use App\Models\Permission;
 use App\Models\Specialty;
 use App\Models\Teacher;
@@ -95,7 +94,8 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
             ->set('form.specialtyId', $specialty->id)
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'Instituto Nacional de Aprendizaje')
-            ->set('form.yearObtained', 2020)
+            ->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
             ->call('save')
             ->assertHasNoErrors();
 
@@ -123,7 +123,8 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
             ->assertSet('institutionSearchUnavailable', true)
             ->assertSet('institutionSuggestions', []);
 
-        $component->set('form.yearObtained', 2020)
+        $component->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
             ->call('save')
             ->assertHasNoErrors();
 
@@ -152,7 +153,8 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
             ->set('form.institution', 'Universidad Nacional')
             ->assertSet('institutionSuggestions.0.name', 'Universidad Nacional')
             ->set('form.institution', 'A Different Institute Entirely')
-            ->set('form.yearObtained', 2020)
+            ->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
             ->call('save')
             ->assertHasNoErrors();
 
@@ -162,24 +164,48 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
         ]);
     }
 
-    public function test_institution_search_does_not_touch_course_affinity_context(): void
+    public function test_an_institution_made_only_of_digits_is_rejected(): void
     {
-        Http::fake([
-            'api.openalex.org/*' => Http::response(['results' => [
-                ['id' => 'https://openalex.org/I1', 'display_name' => 'Universidad Técnica Nacional'],
-            ]]),
-        ]);
+        Http::fake();
 
         $user = $this->userWithAcademicCredentialPermissions();
         $teacher = Teacher::factory()->create();
-        $credential = AcademicCredential::factory()->create(['docente_id' => $teacher->id]);
+        $specialty = Specialty::factory()->create();
         $this->actingAs($user);
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->call('openEditModal', $credential->id)
-            ->set('form.institution', 'Universidad Técnica')
-            ->assertSet('contextCourseId', null)
-            ->assertSet('institutionSuggestions.0.name', 'Universidad Técnica Nacional');
+            ->call('openCreateModal')
+            ->set('form.specialtyId', $specialty->id)
+            ->set('form.degreeLevel', DegreeLevel::Bachelor->value)
+            ->set('form.institution', '123456')
+            ->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
+            ->call('save')
+            ->assertHasErrors(['form.institution' => 'regex']);
+
+        $this->assertDatabaseMissing('atestados', ['institucion' => '123456']);
+    }
+
+    public function test_an_institution_with_letters_and_digits_is_accepted(): void
+    {
+        Http::fake();
+
+        $user = $this->userWithAcademicCredentialPermissions();
+        $teacher = Teacher::factory()->create();
+        $specialty = Specialty::factory()->create();
+        $this->actingAs($user);
+
+        Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
+            ->call('openCreateModal')
+            ->set('form.specialtyId', $specialty->id)
+            ->set('form.degreeLevel', DegreeLevel::Bachelor->value)
+            ->set('form.institution', 'Sede Regional 2')
+            ->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('atestados', ['institucion' => 'Sede Regional 2']);
     }
 
     private function userWithAcademicCredentialPermissions(): User

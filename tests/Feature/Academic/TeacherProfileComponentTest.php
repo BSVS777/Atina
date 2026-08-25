@@ -3,16 +3,10 @@
 namespace Tests\Feature\Academic;
 
 use App\Models\AcademicCredential;
-use App\Models\Career;
-use App\Models\Course;
 use App\Models\Specialty;
 use App\Models\Teacher;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Livewire\Livewire;
-use Src\Academic\AffinityCatalog\Application\DTOs\AffinityCatalogVersionDTO;
-use Src\Academic\AffinityCatalog\Application\UseCases\CreateAffinityCatalogVersionUseCase;
-use Src\Academic\Teacher\Presentation\Livewire\TeacherProfileComponent;
 use Tests\TestCase;
 
 class TeacherProfileComponentTest extends TestCase
@@ -47,36 +41,5 @@ class TeacherProfileComponentTest extends TestCase
             ->assertSee('Food Engineering')
             ->assertSee('University of Costa Rica')
             ->assertDontSee(__('New academic credential'));
-    }
-
-    public function test_evaluating_affinity_in_a_course_context_shows_career_course_version_and_agreement(): void
-    {
-        $career = Career::factory()->create(['name' => 'Ingeniería del Software']);
-        $course = Course::factory()->create([
-            'career_id' => $career->id,
-            'code' => 'ISW-521',
-            'name' => 'Programación en Ambiente Web I',
-        ]);
-        $specialty = Specialty::factory()->create();
-
-        app(CreateAffinityCatalogVersionUseCase::class)->handle(new AffinityCatalogVersionDTO(
-            courseId: $course->id,
-            councilAgreement: 'Acuerdo XX-2026',
-            gazetteNumber: 'YY',
-            effectiveStartDate: '2026-01-01',
-            effectiveEndDate: null,
-            specialtyIds: [$specialty->id],
-        ), null);
-
-        $teacher = Teacher::factory()->create();
-        $this->actingAs(User::factory()->create());
-
-        Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->set('contextCourseId', $course->id)
-            ->assertSee('Ingeniería del Software')
-            ->assertSee('ISW-521')
-            ->assertSee('Programación en Ambiente Web I')
-            ->assertSee('Acuerdo XX-2026')
-            ->assertSee('YY');
     }
 }

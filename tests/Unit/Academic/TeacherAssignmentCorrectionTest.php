@@ -338,8 +338,9 @@ class TeacherAssignmentCorrectionTest extends TestCase
                 teacherId: $teacherId,
                 specialtyId: $specialtyId,
                 degreeLevel: DegreeLevel::Bachelor,
-                institution: 'National Technical University',
-                yearObtained: 2015,
+                institution: 'Universidad Técnica Nacional',
+                startDate: new DateTimeImmutable('2010-03-01'),
+                endDate: new DateTimeImmutable('2015-11-30'),
             ),
             actorUserId: null,
         );

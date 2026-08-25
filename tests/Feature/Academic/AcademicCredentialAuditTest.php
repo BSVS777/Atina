@@ -29,7 +29,8 @@ class AcademicCredentialAuditTest extends TestCase
             ->set('form.specialtyId', $specialty->id)
             ->set('form.degreeLevel', DegreeLevel::Master->value)
             ->set('form.institution', 'UCR')
-            ->set('form.yearObtained', 2019)
+            ->set('form.startDate', '2014-03-01')
+            ->set('form.endDate', '2019-11-30')
             ->call('save')
             ->assertHasNoErrors();
 
@@ -57,7 +58,8 @@ class AcademicCredentialAuditTest extends TestCase
             'docente_id' => $teacher->id,
             'especialidad_id' => $specialty->id,
             'institucion' => 'UTN',
-            'anio_obtencion' => 2015,
+            'fecha_inicio' => '2010-03-01',
+            'fecha_fin' => '2015-11-30',
         ]);
         $this->actingAs($user);
 
@@ -87,7 +89,8 @@ class AcademicCredentialAuditTest extends TestCase
             ->set('form.specialtyId', $specialty->id)
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'UTN')
-            ->set('form.yearObtained', 2020)
+            ->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
             ->call('save')
             ->assertForbidden();
 

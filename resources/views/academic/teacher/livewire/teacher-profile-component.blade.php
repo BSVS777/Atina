@@ -6,38 +6,6 @@
         <p>{{ __('National ID') }}: {{ $teacher->national_id }} &middot; {{ $teacher->position?->name }}</p>
     </div>
 
-    {{--
-        A small, unpaginated list scoped to this one teacher (typically a
-        handful of rows) — not <x-ui.data-table>, whose search box and
-        pagination footer only make sense for a full catalog. Same CSS
-        classes (.card/.data-row/.actions-cell) so it still looks native.
-    --}}
-    <div class="card" style="padding: 1.25rem 1.5rem;">
-        <div class="form-field" style="margin-bottom: 0;">
-            <label for="profileContextCourse">{{ __('Evaluate affinity in the context of a course (DO-01)') }}</label>
-            <select id="profileContextCourse" wire:model.live="contextCourseId">
-                <option value="">{{ __('No course selected') }}</option>
-                @foreach ($courses as $course)
-                <option value="{{ $course->id }}">{{ $course->code }} — {{ $course->name }}</option>
-                @endforeach
-            </select>
-        </div>
-        @if ($contextEvaluated)
-        <div style="margin-top: .75rem;">
-            @if ($courseContextLabel)
-            <p style="margin: 0; font-weight: 600;">{{ $courseContextLabel }}</p>
-            @endif
-            <p style="margin: .25rem 0 0; color: var(--textSecondary);">
-                @if ($catalogCitation)
-                    {{ $catalogCitation }}
-                @else
-                    {{ __('No catalog published for this course yet.') }}
-                @endif
-            </p>
-        </div>
-        @endif
-    </div>
-
     <div class="card">
         <div class="card-head">
             <span class="card-title">{{ __('Academic credentials') }}</span>
@@ -55,15 +23,13 @@
         </div>
 
         <div class="table-scroll">
-            <div class="table-inner" style="--table-cols: 2fr 1.2fr 2fr 0.8fr {{ $contextEvaluated ? '1.4fr' : '' }} 0.8fr;" role="table">
+            <div class="table-inner" style="--table-cols: 2fr 1.2fr 2fr 1fr 1fr 0.8fr;" role="table">
                 <div class="data-row data-row-head" role="row">
                     <span role="columnheader">{{ __('Specialty') }}</span>
                     <span role="columnheader">{{ __('Degree') }}</span>
                     <span role="columnheader">{{ __('Institution') }}</span>
-                    <span role="columnheader">{{ __('Year') }}</span>
-                    @if ($contextEvaluated)
-                    <span role="columnheader">{{ __('Affinity result') }}</span>
-                    @endif
+                    <span role="columnheader">{{ __('Start date') }}</span>
+                    <span role="columnheader">{{ __('End date') }}</span>
                     <span>{{ __('Actions') }}</span>
                 </div>
 
@@ -72,16 +38,8 @@
                     <span>{{ $row['specialty'] }}</span>
                     <span>{{ __($row['degreeLevel']) }}</span>
                     <span>{{ $row['institution'] }}</span>
-                    <span>{{ $row['yearObtained'] }}</span>
-                    @if ($contextEvaluated)
-                    <span>
-                        @if ($row['isAffine'] === true)
-                        <span class="status-badge affinity-matched">{{ __('Atinente') }}</span>
-                        @elseif ($row['isAffine'] === false)
-                        <span class="status-badge affinity-not-matched">{{ __('No Atinente') }}</span>
-                        @endif
-                    </span>
-                    @endif
+                    <span>{{ $row['startDate'] }}</span>
+                    <span>{{ $row['endDate'] }}</span>
                     <div class="actions-cell">
                         @if ($canManage)
                         <x-ui.row-actions
@@ -161,9 +119,14 @@
             @endif
         </div>
         <div class="form-field">
-            <label for="credentialYearObtained">{{ __('Year obtained') }}</label>
-            <input type="number" id="credentialYearObtained" min="1950" max="{{ date('Y') }}" wire:model="form.yearObtained" class="{{ $errors->has('form.yearObtained') ? 'has-error' : '' }}">
-            @error('form.yearObtained') <span class="form-error">{{ $message }}</span> @enderror
+            <label for="credentialStartDate">{{ __('Start date') }}</label>
+            <input type="date" id="credentialStartDate" min="1950-01-01" max="{{ date('Y-m-d') }}" wire:model="form.startDate" class="{{ $errors->has('form.startDate') ? 'has-error' : '' }}">
+            @error('form.startDate') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+        <div class="form-field">
+            <label for="credentialEndDate">{{ __('End date') }}</label>
+            <input type="date" id="credentialEndDate" min="1950-01-01" max="{{ date('Y-m-d') }}" wire:model="form.endDate" class="{{ $errors->has('form.endDate') ? 'has-error' : '' }}">
+            @error('form.endDate') <span class="form-error">{{ $message }}</span> @enderror
         </div>
         <x-slot:footer>
             <button type="button" class="btn btn-secondary" wire:click="closeModal">{{ __('Cancel') }}</button>

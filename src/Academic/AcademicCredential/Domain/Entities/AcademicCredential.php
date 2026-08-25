@@ -6,13 +6,13 @@ namespace Src\Academic\AcademicCredential\Domain\Entities;
 
 use InvalidArgumentException;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
-use Src\Academic\AcademicCredential\Domain\YearObtained;
+use Src\Academic\AcademicCredential\Domain\StudyPeriod;
 
 /**
- * A teacher's academic credential (degree, institution, year, specialty).
- * Specialty is referenced by id only — the domain doesn't need the
- * specialty's name for any invariant, and validating that the id exists is
- * the repository's job, not the entity's.
+ * A teacher's academic credential (degree, institution, study period,
+ * specialty). Specialty is referenced by id only — the domain doesn't need
+ * the specialty's name for any invariant, and validating that the id
+ * exists is the repository's job, not the entity's.
  */
 final class AcademicCredential
 {
@@ -22,7 +22,7 @@ final class AcademicCredential
         private readonly int $specialtyId,
         private readonly DegreeLevel $degreeLevel,
         private readonly string $institution,
-        private readonly YearObtained $yearObtained,
+        private readonly StudyPeriod $studyPeriod,
     ) {
         if (trim($institution) === '') {
             throw new InvalidArgumentException('Institution is required.');
@@ -54,13 +54,13 @@ final class AcademicCredential
         return $this->institution;
     }
 
-    public function yearObtained(): YearObtained
+    public function studyPeriod(): StudyPeriod
     {
-        return $this->yearObtained;
+        return $this->studyPeriod;
     }
 
     public function withId(int $id): self
     {
-        return new self($id, $this->teacherId, $this->specialtyId, $this->degreeLevel, $this->institution, $this->yearObtained);
+        return new self($id, $this->teacherId, $this->specialtyId, $this->degreeLevel, $this->institution, $this->studyPeriod);
     }
 }

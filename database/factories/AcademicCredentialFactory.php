@@ -17,15 +17,19 @@ class AcademicCredentialFactory extends Factory
 
     public function definition(): array
     {
+        $endDate = fake()->dateTimeBetween('1995-01-01', 'now');
+        $startDate = (clone $endDate)->modify('-'.fake()->numberBetween(3, 6).' years');
+
         return [
             'docente_id' => Teacher::factory(),
             'especialidad_id' => Specialty::query()->inRandomOrder()->value('id') ?? Specialty::factory(),
             'grado' => fake()->randomElement(DegreeLevel::cases()),
             'institucion' => fake()->randomElement([
-                'National Technical University', 'University of Costa Rica',
-                'Costa Rica Institute of Technology', 'National University',
+                'Universidad Técnica Nacional', 'Universidad de Costa Rica',
+                'Instituto Tecnológico de Costa Rica', 'Universidad Nacional',
             ]),
-            'anio_obtencion' => fake()->numberBetween(1995, 2024),
+            'fecha_inicio' => $startDate->format('Y-m-d'),
+            'fecha_fin' => $endDate->format('Y-m-d'),
         ];
     }
 }
