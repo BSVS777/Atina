@@ -2649,3 +2649,191 @@ Application use cases) and native `DateTimeImmutable` (this specific use
 case, deliberately, to stay framework-neutral at the boundary) — the two
 are not interchangeable for testing purposes, and `Carbon::setTestNow()`
 silently does not affect the latter.
+
+## 2026-08-25 — Final correction: replace browser-dependent PDF export with DOMPDF
+
+### AI consultation
+
+PDF export failed on Windows with
+`Symfony\Component\Process\Exception\ProcessFailedException: Error:
+Could not find chrome-headless-shell` — `spatie/browsershot` spawns a
+Node child process that shells out to Puppeteer's own downloaded Chrome
+binary, and that binary was never installed in
+`C:\Users\uyv31\.cache\puppeteer` on this machine. Browser startup was
+unnecessary overhead in the first place: every PDF export in this app
+(`Teachers`, `Affinity Catalog`, `Teacher Assignments/Verification`,
+`Roles`, `Permissions`) renders through one shared template
+(`resources/views/exports/table-pdf.blade.php`) and one shared adapter
+(`SpatiePdfExporter`), and that template is fully static server-rendered
+content — a header, a title, a data table — with no JavaScript, Alpine,
+Livewire, or browser-only CSS anywhere in it.
+
+### Accepted
+
+- **Inspected every PDF template before choosing a driver**, per the
+  batch's own instruction, rather than assuming DOMPDF-compatibility.
+  Confirmed via direct read: no Alpine/Livewire directives, no client
+  JS, and only two Flexbox declarations in the entire template (the
+  three-column header, and the date pill) — the only real
+  DOMPDF-incompatibility found.
+- **Switched the driver, not the abstraction**: `spatie/laravel-pdf`
+  stays the shared port; only `config('laravel-pdf.driver')` (now
+  `dompdf`, was `browsershot`) and `SpatiePdfExporter`'s internals
+  changed. `PdfExporterInterface`/`InteractsWithExports::streamPdf()`
+  are untouched — Presentation still knows nothing about DOMPDF or
+  Browsershot, exactly as before.
+- **`composer require dompdf/dompdf`** (installed `v3.1.6`, resolved
+  automatically past the two vulnerable `3.1.0`/`3.1.x` releases
+  Composer's own audit gate rejected first) and **`composer remove
+  spatie/browsershot`** — nothing in this repository needs a
+  browser-rendered PDF, so DOMPDF became the one global default
+  (`LARAVEL_PDF_DRIVER=dompdf` in `.env.example` and
+  `config/laravel-pdf.php`) rather than keeping runtime driver
+  selection for a browser path that doesn't exist. Also removed the
+  now-unused `puppeteer` npm dependency and the `storage/app/browsershot`
+  temp directory Browsershot's Windows temp-path workaround used to
+  write to — DOMPDF renders fully in-process and needs neither.
+- **Rewrote the template's DOMPDF-incompatible parts, nothing else**:
+  - `.report-header`'s `display:flex` (logo / centered title / tag)
+    became `display:table`/`table-row`/`table-cell` — DOMPDF has no
+    Flexbox support at all, but its CSS-table model reliably reproduces
+    "columns side by side, vertically centered."
+  - `.date-pill`'s `display:inline-flex`+`gap` became two
+    `display:inline-block` spans with an explicit `margin-left`
+    standing in for `gap` (also flex/grid-only).
+  - The five `@font-face` blocks embedding base64 `woff2` Archivo/Source
+    Sans 3 weights were removed entirely — DOMPDF's font subsystem does
+    not reliably parse `woff2`, and every `font-family` declaration now
+    points at `'DejaVu Sans'`, DOMPDF's own bundled Unicode font, which
+    renders Spanish accents (`ñ, á, é, í, ó, ú`) correctly with zero
+    embedded bytes and zero network calls.
+  - The logo `<img>`'s `data:image/avif` source was converted to
+    `data:image/png` (DOMPDF cannot decode AVIF at all) — decoded via
+    PHP's own bundled GD `imagecreatefromavif()`/`imagepng()`, alpha
+    transparency preserved, visually verified before embedding.
+  - Table markup, column widths, and `@page { size: letter }` were left
+    completely unchanged — DOMPDF already renders plain
+    tables/colgroups/borders natively.
+- **New real-pipeline tests**: `SpatiePdfExporterTest` calls
+  `SpatiePdfExporter::fromHtml()` directly (not through a fake) and
+  asserts a real `%PDF-`-signed byte stream comes back; a new
+  `TeacherExportTest` case leaves the real `PdfExporterInterface`
+  binding in place (every other export test in the app substitutes
+  `CapturingPdfExporter`) to prove the actual template — DejaVu fonts,
+  PNG logo, table-based header — renders correctly end to end, not just
+  a synthetic HTML string.
+- **`RoleExportTest`/`PermissionExportTest` (new)**: discovered while
+  auditing every PDF export surface that `RoleComponent::exportPdf()`
+  and `PermissionComponent::exportPdf()` had *zero* test coverage of any
+  kind before this pass, not even their own authorization gates. Added
+  authorized-download, forbidden, and real-pipeline tests for both,
+  matching the existing Teacher/AffinityCatalog/TeacherAssignment
+  pattern. Discovered along the way that both components' `mount()`
+  gates on `viewAny` (`roles.view`/`permissions.view`) independently of
+  `exportPdf`'s own gate — the "without permission" tests grant `view`
+  but withhold `export_pdf` specifically, so they test the export gate
+  itself rather than failing one step earlier at `mount()`.
+- **Benchmarked, not assumed**: 3 real generations of a representative
+  25-row, 5-column report (via `php artisan tinker`, calling
+  `Pdf::html(...)->generatePdfContent()` directly) measured 221 ms
+  (cold), 185 ms, and 184 ms — 197 ms average, well under the batch's
+  "well below 1 second" target. Also empirically confirmed (`Get-Process
+  -Name node,chrome,chromium,chrome-headless-shell` before/after) that
+  generation spawns zero new processes — the existing Chrome PIDs on the
+  machine were the user's own browser windows, unchanged by the export.
+
+### Rejected
+
+- Merely running `npx puppeteer browsers install chrome-headless-shell`
+  and leaving every report Chrome-dependent — the batch's own framing
+  ("the goal is NOT merely to install the missing Chrome binary"), and
+  inspection confirmed no report actually needs a browser.
+- Keeping `spatie/browsershot` installed "just in case" a future report
+  needs it — nothing currently does; re-adding it (plus a per-export
+  `->driver('browsershot')` call) is a two-line change if that ever
+  becomes true, and an unused heavy dependency isn't free in the
+  meantime.
+- Hardcoding a machine-specific Chrome/Node path into any config or
+  `.env.example` — moot now that no driver in this app's active path
+  shells out to either, but also would have violated the batch's own
+  instruction regardless.
+- Introducing a Clock abstraction, a queue, or any new
+  infrastructure for this change — DOMPDF's in-process, synchronous
+  rendering was already fast enough (sub-250ms) that none of the
+  batch's optional escape hatches (queued generation, a caching layer)
+  were justified by the measured numbers.
+- Rewriting `PdfExporterInterface`/`InteractsWithExports`/the Blade
+  template's table markup — none of them touch anything
+  DOMPDF-incompatible; changing them would have been unjustified churn
+  against the batch's own "keep the existing exporter abstraction"
+  instruction.
+- A PDF-parsing/text-extraction library to assert rendered table
+  content byte-for-byte — the existing `CapturingPdfExporter`-based
+  tests already assert HTML content pre-render; the new real-pipeline
+  tests only need to prove DOMPDF itself produces a valid, non-trivial
+  PDF, which a `%PDF-` signature check plus a byte-count floor already
+  does proportionately.
+
+### Why
+
+A rendering engine should match what the document actually needs, not
+default to the heaviest option "to be safe." This template's entire
+rendering surface — headers, a table, static text — is something pure
+PHP has been able to lay out correctly for two decades; the only reason
+Browsershot was ever in the picture was that CSS `display:flex` doesn't
+degrade gracefully without an explicit fallback, and a full
+headless-Chromium/Node/Puppeteer chain is a disproportionate amount of
+infrastructure, failure surface, and cold-start latency to carry for
+that one gap. Hexagonal Architecture made the actual fix narrow: only
+the Infrastructure adapter and one Blade template needed to change: the
+Domain/Application layers, and even most of Presentation, never knew
+which renderer was underneath.
+
+### Corrections
+
+None — the driver swap itself required no back-and-forth. The one thing
+discovered and fixed mid-pass was the missing Role/Permission PDF export
+test coverage (see Accepted above), which was a pre-existing gap
+surfaced by this batch's "verify every export surface" instruction, not
+a mistake introduced by this change.
+
+### Verification
+
+- `php artisan test`: **214/214 passing**, 491 assertions (up from the
+  205/205, 466-assertion baseline recorded at the start of this batch;
+  9 new tests: `SpatiePdfExporterTest` ×2, one real-pipeline case added
+  to `TeacherExportTest`, `RoleExportTest` ×3, `PermissionExportTest`
+  ×3).
+- `./vendor/bin/phpstan analyse --memory-limit=1G`: 0 errors.
+- `./vendor/bin/pint --test`: every file touched this pass is clean;
+  whole-repo run fails only on the same 18 pre-existing baseline files
+  every prior batch has already reported, none touched here.
+- `npm run typecheck`: 0 errors. `npm run build`: succeeds.
+- `composer validate`: valid. `composer show dompdf/dompdf`: `v3.1.6`.
+  `composer show spatie/laravel-pdf`: `2.12.0`. `spatie/browsershot`:
+  confirmed no longer installed (`composer show` reports "not found").
+- `php artisan route:list` / `php artisan migrate:status`: unchanged —
+  no route or schema change in this batch.
+- Process check: `Get-Process -Name node,chrome,chromium,
+  chrome-headless-shell` before and after a real PDF generation
+  returned an identical PID set — zero new browser/Node processes
+  spawned.
+- Benchmark (see Accepted above): cold 221 ms, warm 185 ms / 184 ms,
+  average 197 ms, for a real 25-row report through the actual
+  `table-pdf.blade.php` template.
+- Browser walkthrough: **unavailable this session** —
+  `tabs_context_mcp` returned "Browser extension is not connected,"
+  consistent with every prior session's attempt.
+
+### Learning
+
+"Static report → DOMPDF, browser-only content → a real browser driver"
+is the right default question to ask *before* picking a PDF renderer in
+this codebase, not after something breaks — `spatie/laravel-pdf`'s own
+driver abstraction makes that a config-and-adapter change, not an
+architecture change, as long as the Blade template was never actually
+using anything browser-specific to begin with. Also: DOMPDF's
+`woff2`/AVIF gaps are exactly the kind of "one browser could paper over,
+pure PHP can't" case that's easy to miss during inspection unless the
+template is actually rendered and compared, not just read — the base64
+font/image payloads look identical in the source either way.
