@@ -2466,3 +2466,186 @@ for this codebase specifically: any future debounced/live Livewire
 property tied to an external call needs the same `Http::preventStrayRequests()`
 discipline in `tests/TestCase.php` from day one, not bolted on after the
 fact.
+
+## 2026-08-25 — Final correction pass: D6 resolution + DO-02b invariant hardening
+
+### AI consultation
+
+Final audit (`FINAL_ACADEMIC_MODULE_AUDIT.md`) identified two remaining
+items before the module could be declared complete:
+
+- D6 (the target date predates every catalog version) was still
+  documented as unresolved, despite the user having since decided that
+  the professor's previously confirmed *general* catalog fallback rule
+  ("when there is no catalog version appropriate to the target period,
+  an available catalog version is used as fallback, marked provisional")
+  also governs this specific edge case.
+- DO-02b's Technical Note PDF-type and ratification-deadline invariants
+  were enforced only in `TechnicalNoteForm` (Livewire/Presentation), not
+  in `AttachTechnicalNoteUseCase` (Application) or `TechnicalNote`
+  (Domain) — a real, if narrow, gap if that use case were ever invoked
+  from outside the form.
+
+Scope was explicitly limited to these two items plus the final
+documentation/verification pass; no unrelated feature work, no
+architecture redesign, no push.
+
+### Accepted
+
+- **D6 wording, applied as documented interpretation, not as a claim of
+  separate professor confirmation.** Updated
+  `tests/Unit/Academic/CatalogVersionResolverTest.php`'s class docblock
+  and the D6 test's own docblock to state plainly that D6 is resolved
+  by *applying* the already professor-confirmed general fallback rule
+  to the predates-all-versions hypothetical — explicitly not by the
+  professor having separately answered that exact scenario. No
+  production code changed: `CatalogVersionResolver` already implemented
+  this behavior; only the documentation of *why* it's now considered
+  resolved changed.
+- **`AttachTechnicalNoteUseCase::handle()` now validates before any
+  write**: `$dto->document->mimeType !== 'application/pdf'` throws a new
+  `InvalidTechnicalNoteAttachmentException`; a missing/unparseable/past
+  `ratificationDeadline` throws a new `InvalidTechnicalNoteDeadlineException`
+  (both under `Src\Academic\TeacherAssignment\Domain\Exceptions`,
+  extending `RuntimeException`, framework-neutral, matching the existing
+  `InvalidAssignmentTransitionException` convention in the same
+  directory).
+- **Application-boundary validation (not a new Domain value object)**:
+  `UploadedDocument` (already a framework-neutral Domain contract
+  carrying `mimeType`) and the plain `ratificationDeadline` string on
+  `AttachTechnicalNoteDTO` already gave the use case everything needed
+  to enforce both invariants; no `TechnicalNoteAttachment` VO was
+  introduced.
+- **`TeacherAssignmentComponent::attachTechnicalNote()`** now also
+  catches both new exception types and maps them to
+  `noteForm.document`/`noteForm.ratificationDeadline` field errors,
+  identically to the existing `InvalidAssignmentTransitionException`
+  catch — so this is invisible to a normal UI user; it only matters for
+  a hypothetical future entry point that bypasses the Livewire form.
+- **Three new tests in `TechnicalNoteFlowTest`** that call
+  `AttachTechnicalNoteUseCase` directly (as every test in that file
+  already does, never through `TeacherAssignmentComponent`): a non-PDF
+  attachment, a past deadline, and an empty deadline are each rejected
+  with zero rows written to `notas_tecnicas`.
+- **Corrected, not just re-verified, `test_an_overdue_pending_note_is_automatically_marked_expired`**:
+  it previously created a Technical Note directly with an
+  already-past deadline to set up the overdue-expiry scenario — exactly
+  the input the new invariant now correctly rejects. Fixed by creating
+  the note with a valid (future) deadline through the use case, then
+  backdating the persisted `fecha_limite_ratificacion` column directly
+  via the Eloquent model to simulate the deadline having since passed,
+  which is what `ExpireOverdueTechnicalNotesUseCase` is actually meant
+  to react to (an aged row), not a row that could no longer be created
+  through the authoritative boundary in the first place.
+
+### Rejected
+
+- Claiming the professor separately answered the exact D6 hypothetical
+  — they did not; only the general rule was confirmed, and this pass's
+  wording deliberately preserves that distinction everywhere it touched
+  (test docblocks, requirements matrix, final audit).
+- Treating D6 as permanently ambiguous despite the chosen interpretation
+  — the user made an explicit decision this pass; leaving it "still
+  unresolved" after that decision would misrepresent the project's own
+  state.
+- Keeping DO-02b's critical invariants exclusively in Livewire — the
+  batch's whole point was ending that single point of failure.
+- Removing or weakening `TechnicalNoteForm::rules()` — UX validation is
+  retained in full; the two layers serve different purposes (fast
+  feedback vs. authoritative protection) and neither substitutes for
+  the other.
+- Importing `Illuminate\Http\UploadedFile`, `TemporaryUploadedFile`, or
+  any HTTP/Livewire type into Domain or Application — `UploadedDocument`
+  already isolates Presentation's upload objects from the rest of the
+  boundary; nothing new needed to cross that line.
+- Building a PDF parser/binary inspector — the batch instructions were
+  explicit that MIME-type metadata already available from the upload
+  pipeline is proportional; deeper document verification was never in
+  scope.
+- A `TechnicalNoteAttachment` Domain value object — considered per the
+  batch's "Option B," rejected as unnecessary ceremony wrapping a single
+  field (`mimeType`) already available on the existing `UploadedDocument`
+  contract.
+- Enforcing "deadline not in the past" inside `TechnicalNote`'s
+  constructor or `EloquentTechnicalNoteRepository::toDomain()` — that
+  constructor is also the repository's hydration path for historical
+  rows (including already-expired notes, whose deadline is legitimately
+  in the past by the time they're read back). The invariant is a
+  *creation-time* rule enforced once in the use case, not an
+  unconditional entity-level constraint that would break re-hydrating
+  real historical data.
+- Carbon time-travel (`$this->travelTo()`) for the corrected overdue-
+  expiry test — tried first, silently did nothing, because
+  `ExpireOverdueTechnicalNotesUseCase` uses a bare native
+  `new DateTimeImmutable`, which `Carbon::setTestNow()` does not affect.
+  Directly backdating the persisted column is both simpler and correctly
+  targets what that use case actually reads.
+- Rewriting `FINAL_ACADEMIC_MODULE_AUDIT.md`'s historical findings —
+  every previously-recorded finding was preserved and explicitly marked
+  "RESOLVED ON CURRENT HEAD" with a pointer to the new Section 15,
+  rather than deleted or silently rewritten.
+
+### Why
+
+Presentation validates user interaction for fast feedback; Application/
+Domain protects business invariants regardless of entry point. The two
+must not collapse into one layer: removing Livewire's rules would
+degrade UX (a full round-trip to discover a wrong file type), while
+leaving validation only in Livewire means any future entry point —
+a REST endpoint, a console command, a queued job, a test — could
+silently create an invalid Technical Note. Application-layer validation
+was the smallest change that closes that gap without introducing a new
+abstraction the codebase doesn't otherwise use (no Domain VO, no Clock
+interface, no result-wrapper type) — consistent with this project's
+existing pattern of calling `new DateTimeImmutable` directly inside
+Application use cases (`RatifyTechnicalNoteUseCase`,
+`ExpireOverdueTechnicalNotesUseCase`) rather than injecting a clock
+abstraction that nothing else in the codebase uses.
+
+### Corrections
+
+- `tests/Feature/Academic/TechnicalNoteFlowTest.php`:
+  `test_an_overdue_pending_note_is_automatically_marked_expired` rewritten
+  to create a valid-deadline note and backdate the persisted row (see
+  Accepted, above) instead of creating an already-invalid one.
+- `tests/Feature/Academic/TechnicalNoteFlowTest.php`: added
+  `use App\Models\TechnicalNote as TechnicalNoteModel;` and switched a
+  fully-qualified `\App\Models\TechnicalNote::query()` reference to the
+  imported alias — `./vendor/bin/pint --test` flagged
+  `fully_qualified_strict_types`/`ordered_imports` on the first pass;
+  fixed and re-verified clean.
+
+### Verification
+
+- `php artisan test`: **205/205 passing**, 466 assertions (up from
+  202/202, 463 assertions).
+- `./vendor/bin/phpstan analyse --memory-limit=1G`: 0 errors.
+- `./vendor/bin/pint --test`: every file touched this pass is clean;
+  whole-repo run fails only on the same 18 pre-existing baseline files
+  prior batches have already reported, none touched here.
+- `npm run typecheck`: 0 errors. `npm run build`: succeeds.
+- `php artisan route:list` / `php artisan migrate:status`: unchanged; no
+  new migration needed.
+- Domain dependency scan (`grep` for `Illuminate`/`Livewire`/`Eloquent`/
+  `TemporaryUploadedFile` across `src/Academic/*/Domain/`): zero matches,
+  including both new exception files.
+- Browser walkthrough: **unavailable this session** —
+  `tabs_context_mcp` returned "Browser extension is not connected,"
+  consistent with every prior session's attempt. Manual QA checklist
+  delivered in this pass's final report instead.
+- Full detail: `FINAL_ACADEMIC_MODULE_AUDIT.md` Section 15.
+
+### Learning
+
+A validation rule that looks purely "form-level" often has a hidden
+temporal coupling with existing tests: the overdue-expiry test had been
+silently relying on the *absence* of a deadline invariant to set up its
+own fixture. Adding an invariant at a new layer requires re-auditing
+every existing test that constructs data through the same entry point,
+not just the tests that assert the new invariant directly — otherwise a
+legitimate hardening change looks like a flaky regression. Also
+reconfirmed: this codebase mixes `Carbon`/`now()` (Presentation, most
+Application use cases) and native `DateTimeImmutable` (this specific use
+case, deliberately, to stay framework-neutral at the boundary) — the two
+are not interchangeable for testing purposes, and `Carbon::setTestNow()`
+silently does not affect the latter.

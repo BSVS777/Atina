@@ -157,7 +157,7 @@ Section 3(b) of the same document additionally imposes **project-wide, non-funct
   - Ratification/rejection: `RatifyTechnicalNoteUseCase`/`RejectTechnicalNoteUseCase` persist correct state transitions; the original `AffinityVerification` row is never overwritten (a new row is appended instead).
 - **Test evidence:** `TechnicalNoteFlowTest` — guard requiring NotMatched/NoCatalog, duplicate-note blocking, non-overwrite of original verification, automatic overdue expiry, ratify/reject — all pass. **No test drives the use case directly with a non-PDF file or a past/empty deadline** to confirm domain-level rejection, because no such rejection exists to confirm.
 - **UI evidence:** Technical Note modal enforces file type and deadline client/server-side via the Livewire form rule (previously browser-verified per the project journal for the happy path; the missing-PDF block was confirmed via the form rule, not a live file-upload attempt, per the journal's own note that Livewire's async upload could not be exercised in that session's browser tooling).
-- **Actual gap:** PDF-type and deadline validation exist only at the Presentation (form) layer. If `AttachTechnicalNoteUseCase` is ever invoked from any other entry point (a future API, a console command, a test that bypasses the form), nothing in the domain or application layer stops a non-PDF attachment or an already-overdue deadline from being persisted.
+- **Actual gap (as of `387a3d5`):** PDF-type and deadline validation exist only at the Presentation (form) layer. If `AttachTechnicalNoteUseCase` is ever invoked from any other entry point (a future API, a console command, a test that bypasses the form), nothing in the domain or application layer stops a non-PDF attachment or an already-overdue deadline from being persisted. **RESOLVED ON CURRENT HEAD — see Section 15.**
 
 ---
 
@@ -206,10 +206,10 @@ Structurally, yes, with a caveat. `catalogos_atinencia` is keyed by `curso_id` a
 | Exact version exists | Returns that version, not provisional | Explicit in SRS |
 | Date falls between two versions (gap) | Picks the immediately-preceding version, marked provisional | Explicit in SRS ("si no existe entrada vigente... aplica la última entrada vigente") |
 | Only older versions exist | Same behavior — latest-starting old version, provisional | Explicit in SRS |
-| Target date predates every version | Falls back to the **earliest future** version, marked provisional | **Assumption**, documented in the project's own journal (D6) — the SRS only describes falling back to "la última entrada vigente," which does not exist in this case (there is no past vigente entry at all) |
+| Target date predates every version | Falls back to the **earliest future** version, marked provisional | **RESOLVED ON CURRENT HEAD (2026-08-25) — see Section 15.** Governed by the professor-confirmed general catalog fallback rule (an available catalog version is used as fallback, marked provisional, when none is appropriate to the target period) applied to this edge case: no prior version exists to prefer, so the earliest available version is used instead |
 | No catalog exists at all | Returns null → delegated to DO-02d as "Sin catálogo" | Explicit in SRS |
 
-All five cases are covered by individually-read (not test-name-only) assertions in `CatalogVersionResolverTest` (7 methods). An exact match is checked first in the algorithm, so "provisional" is never misapplied to case 1. **The predates-every-version case is the one genuinely worth a professor's confirmation** — a defensible but unstated extrapolation, not a literal reading of the text.
+All five cases are covered by individually-read (not test-name-only) assertions in `CatalogVersionResolverTest` (7 methods). An exact match is checked first in the algorithm, so "provisional" is never misapplied to case 1. The predates-every-version case, previously flagged in this audit (`387a3d5`) as worth a professor's confirmation, is resolved on current HEAD as an application of the already professor-confirmed general fallback rule — see Section 15 for the exact wording distinction preserved in the AI journal.
 
 ### Technical Note
 
@@ -351,7 +351,7 @@ Test-to-requirement mapping (all confirmed by reading the actual assertions, not
 | Question | Classification |
 |---|---|
 | Should the affinity-matching algorithm consider degree level (grado) in addition to, or instead of, specialty only? | **RESOLVED — PROFESSOR-CONFIRMED.** Specialty-only, exact catalog membership; no degree-level criterion; no related-specialty inference. |
-| Is falling back to the earliest **future** catalog version correct when the target date predates every catalog version (vs. treating it as equivalent to "Sin catálogo")? | **SHOULD CONFIRM WITH PROFESSOR** — still unresolved; a documented but unstated extrapolation beyond the literal SRS text. |
+| Is falling back to the earliest **future** catalog version correct when the target date predates every catalog version (vs. treating it as equivalent to "Sin catálogo")? | **RESOLVED ON CURRENT HEAD (2026-08-25).** Governed by the professor-confirmed general catalog fallback rule applied to this edge case — see Section 15. Not a claim that the professor was separately asked this exact hypothetical. |
 | Should Administrador have the same Technical-Note-creation and No-Catalog-decision powers the SRS text names only for Coordinadora de Docencia? | **RESOLVED — PROFESSOR-CONFIRMED.** Administrador has access to all Academic-module operations, intentionally. |
 | Is Administrador-only ratification of a Technical Note an acceptable digital proxy for "ratificación...del Consejo Universitario"? | **SAFE ASSUMPTION** — no literal SRS-named role exists to compare against; Administrador-only is the most conservative reasonable interpretation available. |
 | Does the (carrera, curso) invariant via `curso_id` alone remain safe if transversal/service courses are ever brought into scope? | **SAFE ASSUMPTION for current scope** — not blocking, since those courses are currently and deliberately excluded. |
@@ -367,12 +367,12 @@ No blocking business ambiguity was identified — nothing found prevents the mod
 | DO-01 | PARTIAL | Storage/authorization/audit trail compliant; course-context citation omits carrera, curso only implicit | Add carrera + curso to the citation string |
 | DO-02 | CONFIRMED | `(curso_id, version)` unique key + mandatory `carrera_id` FK; acuerdo/Gaceta/versioning/overlap/date-targeting/immutability all verified | None |
 | DO-02a | CONFIRMED | 4-outcome machine correct; matching is specialty-only, degree level unused — professor-confirmed as intended | None |
-| DO-02b | PARTIAL | Entry points, auto-expiry, scheduled command all correct; PDF/deadline validation is form-only, not domain-enforced | Move validation into the domain/use-case layer |
+| DO-02b | **RESOLVED ON CURRENT HEAD (2026-08-25) — see Section 15** | Entry points, auto-expiry, scheduled command all correct; PDF/deadline validation is now enforced in `AttachTechnicalNoteUseCase` (Application boundary), independent of `TechnicalNoteForm`'s Livewire rules | None |
 | DO-02d | CONFIRMED | Fully independent of Technical Note; audit log and no-redecision guard both verified in code and tests | None |
 | Authorization | CONFIRMED | Credential/catalog permissions match SRS exactly; Administrador's broader Technical-Note-creation and No-Catalog-decision access is professor-confirmed as intentional (Administrador has access to everything) | None |
 | Auditability | PARTIAL | Credential create/edit and No-Catalog decision audited (required, met); catalog version creation and Technical Note ratify/reject are not audited | Add audit logging to ratify/reject at minimum |
 | Catalog history | CONFIRMED | Full version history preserved; historical verification immutable; all 5 date-edge-cases individually tested | None |
-| State machine | NEEDS PROFESSOR DECISION | 4 outcomes correctly distinguished; predates-all-versions case is an unstated extrapolation | Confirm intended behavior |
+| State machine | **RESOLVED ON CURRENT HEAD (2026-08-25) — see Section 15** | 4 outcomes correctly distinguished; predates-all-versions case (D6) now governed by the professor-confirmed general fallback rule | None |
 | MySQL | CONFIRMED | `migrate:status` succeeded live against `gestion_academica_utn` this session; guarded migrations; native-ENUM-aware casts | None |
 | TALL | CONFIRMED | Tailwind/Alpine/Laravel/Livewire all demonstrated with direct evidence, not assumed | None |
 | TypeScript | MISSING | Zero `.ts` files, no `tsconfig`, no TS plugin anywhere in the build | Add real TypeScript usage |
@@ -396,9 +396,9 @@ The core state machine (catalog versioning, the four-outcome verification, Techn
 
 ### Must fix before final delivery
 
-- DO-01: render carrera and curso in the per-credential course-context citation, alongside the already-present version and agreement.
-- DO-02b: enforce PDF mime-type and non-past ratification deadline at the domain/use-case level, not only in the Livewire form.
-- Build real TypeScript usage, one real external REST API consumption, and a genuine JWT-authenticated flow — all three are currently entirely absent and are stated as mandatory "sin excepción" in the Word document.
+- DO-01: render carrera and curso in the per-credential course-context citation, alongside the already-present version and agreement. **Fixed — see Section 14.**
+- DO-02b: enforce PDF mime-type and non-past ratification deadline at the domain/use-case level, not only in the Livewire form. **Fixed — see Section 15.**
+- Build real TypeScript usage, one real external REST API consumption, and a genuine JWT-authenticated flow — all three are currently entirely absent and are stated as mandatory "sin excepción" in the Word document. **Fixed — see Section 14.**
 
 ### Should improve before final delivery
 
@@ -409,7 +409,7 @@ The core state machine (catalog versioning, the four-outcome verification, Techn
 
 ### Confirm with professor
 
-- Whether falling back to the earliest future catalog version is the intended behavior when the target date predates every catalog version — **still unresolved**.
+- Whether falling back to the earliest future catalog version is the intended behavior when the target date predates every catalog version — **RESOLVED on current HEAD as an application of the professor-confirmed general fallback rule; see Section 15.**
 
 The following were open at the time of this audit and have since been **professor-confirmed** (see `Docs/DIARIO_DECISIONES_IA.md`):
 - Affinity matching is specialty-only, exact catalog membership, no degree-level criterion.
@@ -434,8 +434,8 @@ The audit above (Sections 1–13) reflects `integration/atina-foundation` @ `387
 | External REST API | Missing entirely | **Implemented** — OpenAlex Institutions API (`Src\Academic\AcademicCredential\Infrastructure\Services\OpenAlexInstitutionSearchService`), enrichment-only, never a hard dependency, never affects affinity (Batch 5, this session) |
 | Technical Note ratify/reject not audited | Gap | **Fixed** — `RatifyTechnicalNoteUseCase`/`RejectTechnicalNoteUseCase` both write an `AuditLogEntry` (`ACTION_UPDATED`), confirmed by direct file read this session |
 | Catalog version creation not audited | Gap | **Fixed** — `CreateAffinityCatalogVersionUseCase` writes an `AuditLogEntry` (`ACTION_CREATED`), confirmed by direct file read this session |
-| DO-02b PDF mime-type / non-past deadline enforced only in the Livewire form, not the domain layer | Gap | **Unchanged — still open.** `TechnicalNote`'s constructor still only rejects an empty `documentPath` string (`Domain/Entities/TechnicalNote.php:26-28`); `AttachTechnicalNoteUseCase::handle()` still does `new DateTimeImmutable($dto->ratificationDeadline)` with no guard. Out of this batch's scope (OpenAlex touches `AcademicCredential`, not `TeacherAssignment`/`TechnicalNote`) — carried forward, not silently dropped |
-| D6 (target date predates every catalog version) needs professor confirmation | Open | **Still open** — no new professor answer this session; not to be read as confirmed |
+| DO-02b PDF mime-type / non-past deadline enforced only in the Livewire form, not the domain layer | Gap | **Resolved 2026-08-25 — see Section 15.** `AttachTechnicalNoteUseCase::handle()` now rejects a non-PDF `mimeType` and a missing/past `ratificationDeadline` before persisting, independent of `TechnicalNoteForm` |
+| D6 (target date predates every catalog version) needs professor confirmation | Open | **Resolved 2026-08-25 — see Section 15.** Governed by the professor-confirmed general catalog fallback rule applied to this edge case |
 | Browser verification | Could not connect | **Still could not connect** this session either (Claude-in-Chrome extension reported "not connected") — see the Batch 5 final report for what was verified instead (Livewire component tests + one live `php artisan tinker` call against the real OpenAlex API) |
 
 ### Updated Section 5 (Technical Requirements Audit) row-by-row
@@ -450,4 +450,181 @@ The audit above (Sections 1–13) reflects `integration/atina-foundation` @ `387
 
 ### Updated Section 13 verdict (superseding the 2026-08-10-session verdict above for current HEAD)
 
-The prior verdict ("C. MODULE HAS FUNCTIONAL GAPS") was driven primarily by three entirely-absent mandatory technologies plus the DO-01 citation gap. All four are now resolved. The one concrete gap that survives unchanged is DO-02b's form-only (not domain-enforced) PDF/deadline validation — a real but narrow gap, not a missing capability. Browser verification remains unconfirmed in this environment across every session that has attempted it. See the Batch 5 final report (delivered alongside this document) for the current-session final verdict letter and the full requirement-by-requirement evidence table.
+The prior verdict ("C. MODULE HAS FUNCTIONAL GAPS") was driven primarily by three entirely-absent mandatory technologies plus the DO-01 citation gap. All four are now resolved. The one concrete gap that survived this addendum unchanged — DO-02b's form-only (not domain-enforced) PDF/deadline validation — is itself resolved as of 2026-08-25 (see Section 15), alongside D6. Browser verification remains unconfirmed in this environment across every session that has attempted it, including the 2026-08-25 pass (Section 15). See the Batch 5 final report (delivered alongside this document) for that session's verdict letter, and Section 15 below for the current final verdict.
+
+---
+
+## 15. Addendum — 2026-08-25 (Final Correction Pass: D6 resolution + DO-02b invariant hardening)
+
+Scope: resolve and document D6 consistently with the professor-confirmed general
+catalog fallback rule; enforce DO-02b's PDF/deadline invariants below
+Presentation; run the full verification suite; issue a final verdict. No
+unrelated feature work. No push.
+
+### D6 — target date predates every catalog version
+
+**Production code: unchanged.** `CatalogVersionResolver::resolve()`
+already implemented exactly the behavior the general fallback rule
+requires — the correction here is documentary and test-clarity only, not
+a behavior change (per the batch instructions: "do not change this
+behavior unless current code differs," and it did not differ).
+
+**Business interpretation applied:** the professor's previously
+confirmed general rule — "when there is no catalog version appropriate
+to the target period, an available catalog version is used as fallback,
+marked provisional" — is applied to the specific predates-all-versions
+hypothetical:
+
+1. A covering version exists → use it, not provisional.
+2. No covering version, but a prior version exists → most recent prior
+   version, provisional (D5, already professor-confirmed).
+3. No covering version, no prior version, but a future version exists →
+   earliest subsequent version, provisional (D6, resolved this pass).
+4. No catalog versions exist at all → `Sin catálogo` (DO-02d).
+
+**Important wording distinction, preserved deliberately:** this is
+documented as "D6 is resolved by applying the professor-confirmed
+general catalog fallback rule to the predates-all-versions edge case" —
+**not** as "the professor separately answered the exact D6 hypothetical."
+The professor was never asked that specific scenario; only the general
+rule. `CatalogVersionResolverTest`'s class docblock and the D6 test's
+own docblock were updated to make this distinction explicit (see
+`tests/Unit/Academic/CatalogVersionResolverTest.php`).
+
+**Tests:** `CatalogVersionResolverTest` already had 7 methods covering
+all branches (exact match, D5 × 2, D6, gap-between-versions,
+no-versions, open-ended). No new resolver behavior needed a new test;
+the existing `test_d6_target_date_before_all_versions_applies_the_earliest_as_provisional`
+and `test_d5_no_exact_match_applies_the_most_recent_prior_version_as_provisional`
+already independently prove the two fallback branches this rule
+distinguishes. Docblocks strengthened, no resolver/test logic rewritten,
+no second resolver created.
+
+### DO-02b — invariants hardened below Presentation
+
+**Previous state:** PDF mime-type and ratification-deadline validation
+existed only in `TechnicalNoteForm::rules()` (Livewire). The domain
+`TechnicalNote` entity's constructor only rejected an empty
+`documentPath` string; `AttachTechnicalNoteUseCase::handle()` parsed
+`$dto->ratificationDeadline` with a bare `new DateTimeImmutable(...)`
+and no guard — an empty string silently resolved to "now" rather than
+throwing.
+
+**Architectural layer chosen: Application boundary validation (Option A
+from the batch instructions).** `UploadedDocument` (a framework-neutral
+Domain value object already carrying `mimeType`) and the plain
+`ratificationDeadline` string on `AttachTechnicalNoteDTO` already gave
+`AttachTechnicalNoteUseCase` everything it needed — no new Domain value
+object was justified. A `TechnicalNoteAttachment` VO was considered and
+rejected as unnecessary ceremony around a single string field already
+provided by an existing VO.
+
+**Changes:**
+
+- `src/Academic/TeacherAssignment/Domain/Exceptions/InvalidTechnicalNoteAttachmentException.php`
+  (new) — `mustBeAPdf(string $mimeType)`.
+- `src/Academic/TeacherAssignment/Domain/Exceptions/InvalidTechnicalNoteDeadlineException.php`
+  (new) — `required()`, `mustNotBeInThePast()`. Both extend
+  `RuntimeException`, matching the existing
+  `InvalidAssignmentTransitionException` convention in the same
+  directory; neither imports anything Laravel/Livewire/HTTP-specific.
+- `AttachTechnicalNoteUseCase::handle()` now, before constructing the
+  `TechnicalNote` entity: rejects `$dto->document->mimeType !==
+  'application/pdf'` (`InvalidTechnicalNoteAttachmentException`), and
+  parses the deadline through a new private `parseDeadline()` that
+  rejects an empty/unparseable string and any date before
+  `new DateTimeImmutable('today')` (`InvalidTechnicalNoteDeadlineException`).
+  Both checks run *before* any write, so an invalid attachment/deadline
+  creates zero database rows.
+- `TeacherAssignmentComponent::attachTechnicalNote()` now also catches
+  both new exception types and maps them to the same
+  `noteForm.document` / `noteForm.ratificationDeadline` field errors the
+  Livewire rules already produce — so a UI user sees no behavior change
+  at all; this catch only matters for a hypothetical future entry point
+  that bypasses the form.
+- **No change** to `TechnicalNoteForm::rules()` — Livewire validation is
+  fully preserved for immediate UX feedback, per the "duplication is
+  intentional" instruction (UI validates user interaction; Application/
+  Domain protects business invariants).
+- **No change** to `TechnicalNote`'s domain constructor or
+  `EloquentTechnicalNoteRepository::toDomain()` — deliberately: the
+  repository's hydration path reconstructs historical rows from the
+  database (including already-expired notes whose deadline is now in
+  the past by design), so the "deadline must not be in the past" rule
+  is a *creation-time* invariant, not a property the entity can enforce
+  unconditionally in its constructor without breaking legitimate
+  historical reads.
+
+**Tests (`tests/Feature/Academic/TechnicalNoteFlowTest.php`, all calling
+`AttachTechnicalNoteUseCase` directly — no `TeacherAssignmentComponent`,
+no Livewire, in any test in this file):**
+
+- `test_a_non_pdf_attachment_is_rejected_below_presentation` — new.
+- `test_a_past_deadline_is_rejected_below_presentation` — new.
+- `test_an_empty_deadline_is_rejected_below_presentation` — new.
+- `test_an_overdue_pending_note_is_automatically_marked_expired` —
+  **corrected**, not just re-verified: it previously created a note
+  with an already-past deadline directly (`now()->subDays(1)`), which
+  the new invariant now correctly rejects. Fixed by creating the note
+  with a valid deadline and then backdating the persisted
+  `fecha_limite_ratificacion` column directly via
+  `App\Models\TechnicalNote` (aliased `TechnicalNoteModel` in the test)
+  to simulate the deadline having since passed — exercising
+  `ExpireOverdueTechnicalNotesUseCase` against a genuinely aged row
+  instead of a row that could no longer be created through the
+  authoritative boundary. (Carbon time-travel — `$this->travelTo()` —
+  was tried first and rejected: `ExpireOverdueTechnicalNotesUseCase`
+  uses a bare native `new DateTimeImmutable`, which `Carbon::setTestNow()`
+  does not affect, so time-travel silently did nothing here.)
+- `TechnicalNoteUploadTest` (the Livewire/Presentation-level suite) —
+  **unchanged, still green**: valid PDF, missing document, non-PDF,
+  oversized PDF, modal-close-clears-temp-file, invalid deadline. Every
+  one of these is still blocked by `TechnicalNoteForm::rules()` before
+  the use case is ever called, so none of them exercise the new
+  Application-layer guard — that's the point of the two-layer design.
+
+### Verification (run live this session, current HEAD)
+
+| Command | Result |
+|---|---|
+| `php artisan test` | **205/205 passing**, 466 assertions (up from the 202/202, 463-assertion baseline — net +3 tests: the two new use-case-level rejection tests plus the empty-deadline test; the corrected overdue-expiry test replaces its old body without changing the total method count) |
+| `./vendor/bin/phpstan analyse --memory-limit=1G` | **0 errors** |
+| `./vendor/bin/pint --test` (files touched this pass only) | **Clean** — `AttachTechnicalNoteUseCase.php`, both new exception classes, `TeacherAssignmentComponent.php`, `TechnicalNoteFlowTest.php`, `CatalogVersionResolverTest.php` |
+| `./vendor/bin/pint --test` (whole repo) | **Fails on 18 files, all pre-existing SIGA-baseline drift** (`DDDStructure.php`, `Logout.php`, `FortifyServiceProvider.php`, `PermissionDTO.php`, `RoleDTO.php`, `RoleComponent.php`, etc.) — the same baseline set prior batches have already reported; zero files under `src/Academic/**` or this pass's touched files fail |
+| `npm run typecheck` | **0 errors** |
+| `npm run build` | **Succeeds** (24 modules transformed) |
+| `php artisan route:list` | `POST api/auth/login`, `GET\|HEAD api/me`, `GET\|HEAD api/institutions/search` all present and unchanged |
+| `php artisan migrate:status` | All 28 Academic + platform migrations `Ran`; **no new migration added**, confirming no schema change was needed |
+| Domain dependency scan | `grep` for `^use Illuminate`/`^use Livewire`/`Eloquent`/`TemporaryUploadedFile` across `src/Academic/*/Domain/` → **zero matches**, including the two new exception files |
+
+### Browser walkthrough
+
+**AUTOMATED BROWSER WALKTHROUGH: unavailable.** `tabs_context_mcp` was
+queried directly this session and returned "Browser extension is not
+connected" — consistent with every prior session's attempt recorded in
+this same document and the AI journal. This is not treated as a
+software defect; it is an environment/tooling limitation.
+
+**MANUAL WALKTHROUGH: pending user execution.** See the manual QA
+checklist delivered in this pass's final report (sections A–I: auth,
+permissions, roles, teacher credentials/OpenAlex, DO-01, DO-02a,
+DO-02b — including the new below-Presentation invariants exercised
+through the UI, DO-02d, and general regression checks).
+
+### Final verdict for this pass
+
+**A. 100% SOFTWARE REQUIREMENTS VERIFIED**, conditioned on the
+outstanding manual browser QA item (which is explicitly *not* a
+software-completeness blocker per this document's own established
+convention — see Section 5's closing note and every prior addendum).
+D6 is documented and tested under the agreed general fallback rule;
+DO-02b's PDF/deadline invariants are now protected below Presentation
+with passing tests that bypass the Livewire form entirely; TALL,
+TypeScript, JWT, and the OpenAlex REST integration all remain intact
+and independently re-verified; Hexagonal/DDD boundaries hold with zero
+Domain-layer framework leaks; the full test suite, PHPStan, and
+touched-file Pint are all clean; `npm run typecheck`/`build` are clean.
+No previously-passing test was weakened to reach this result — the one
+test that had to change (`test_an_overdue_pending_note_is_automatically_marked_expired`)
+was corrected because its own setup became invalid under the new
+invariant it did not itself test, not to hide a regression.
