@@ -3139,3 +3139,71 @@ expensive, valuable part was enumerating the branches — especially
 input-order independence in `CatalogVersionResolver`, which no Feature
 test could have exercised because the repository always hands back rows
 in one fixed order.
+
+## 2026-08-25 — CI never ran the TypeScript typecheck gate; npm ci for reproducibility
+
+### Asked
+
+Verify that the project's standard Node install/build procedure actually
+installs `typescript` (a devDependency) and that a clean environment can
+run `npm run typecheck` and `npm run build`, prompted by the prior entry's
+note that `typescript` was missing from `node_modules` and had to be
+manually reinstalled with `npm install --no-save` to run the gate at all.
+
+### Accepted
+
+- `composer.json`'s `setup` script (the only Node install path CI
+  exercises) switched from `npm install` to `npm ci`, and `npm run
+  typecheck` added before `npm run build`.
+- README `Setup` section switched from `npm install` to `npm ci`, and a
+  one-line note added to `Frontend stack` that `npm ci --omit=dev` breaks
+  `typecheck`/`build` since `typescript` is a devDependency.
+
+### Rejected
+
+- Adding a Docker/multi-stage deployment split: the project has no
+  runtime-omit-dev deployment stage today, so there is nothing to
+  separate a build stage from — out of scope, not requested.
+- Changing any application/frontend source code: the build and typecheck
+  were already correct once dependencies were actually installed; nothing
+  in `resources/js/**` needed a change.
+
+### Why
+
+`typescript` is correctly declared in `package.json`'s `devDependencies`
+and agrees with `package-lock.json` (`^7.0.2` / resolved `7.0.2`) — the
+dependency declaration was never the bug. The actual gap: `.github/workflows/tests.yml`
+only runs `composer setup` (`npm install` + `npm run build`, no
+typecheck) then `composer ci:check` (PHP-only: lint, PHPStan, `artisan
+test`). CI has never once run `npm run typecheck`, so a real TypeScript
+type error could merge silently — exactly the class of problem that
+produced the prior session's "typescript missing from node_modules"
+workaround. `npm ci` replaces `npm install` for reproducibility since a
+committed lockfile exists.
+
+### Verification
+
+- Removed `node_modules` entirely; `npm ci` restored 130 packages
+  including `typescript@7.0.2` (`npm ls typescript` confirmed).
+- `npm run typecheck` — 0 errors. `npm run build` — succeeds (Vite,
+  24 modules).
+- `npm install` afterward produced zero diff on `package.json` /
+  `package-lock.json` (sha256 identical before/after).
+- Reproduced the failure mode: `npm ci --omit=dev` then `npm run
+  typecheck` fails (`tsc: command not found`), confirming
+  `devDependencies` are load-bearing for this gate. Restored with a
+  plain `npm ci` afterward — final environment left healthy.
+- No `NODE_ENV`, `NPM_CONFIG_PRODUCTION`, or `npm config get
+  omit/production` forcing dev-dependency omission in this environment.
+- Full regression after the fix: `php artisan test` 394/394 passing (861
+  assertions), `./vendor/bin/phpstan analyse --memory-limit=1G` 0 errors,
+  `npm run typecheck` 0 errors, `npm run build` succeeds.
+- `composer validate` — valid after the `composer.json` edit.
+
+### Learning
+
+A correct `package.json`/lockfile pair is necessary but not sufficient:
+without CI actually running `npm run typecheck`, a broken `.ts` file
+would still pass CI as long as Vite could transpile it, since `vite
+build` strips types rather than checking them. The gate only exists if
+something in the pipeline calls `tsc --noEmit`.
