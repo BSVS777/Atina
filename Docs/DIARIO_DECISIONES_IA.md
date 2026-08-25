@@ -1337,3 +1337,126 @@ no push.
   scripts already invoke it with a non-default flag (here,
   `--memory-limit=1G`) before concluding the tool itself is broken in this
   environment.
+
+## 2026-08-24 — Batch 2: tests and docs for professor-confirmed business rules
+
+### AI consultation
+
+User asked to implement
+`Docs/Atina_Implementation_Prompt_Batches/02_BATCH_BUSINESS_RULES_TESTS_DOCS.md`:
+a focused business-rule verification pass covering three
+professor-confirmed decisions — (1) affinity matching is exact
+specialty-catalog membership, no DegreeLevel, no inference of related
+specialties; (2) prior-catalog-version fallback (D5) is confirmed,
+while the separate predates-all-versions edge case (D6) stays
+explicitly unresolved; (3) Administrador has access to everything in
+the Academic module. Scope: strengthen tests for all three, update
+`Docs/ACADEMIC_AFFINITY_REQUIREMENTS_MATRIX.md`, append this entry,
+audit README/matrix/journal for stale ambiguity wording, and run the
+full verification suite. No TypeScript, JWT, or external REST API
+work; no push.
+
+### Accepted
+
+- **New domain unit test** `AffinityCatalogVersionMatchingTest` (4
+  tests) exercising `AffinityCatalogVersion::isAffineToSpecialty()`
+  directly: exact-match Atinente, unrelated-specialty non-match, and —
+  named after the professor's own example — a related-but-unlisted
+  specialty (Cybersecurity vs. a Programming course's catalog) still
+  produces No Atinente. Plus one test proving membership is exact-ID,
+  not partial/prefix matching.
+- **New feature test** `AdministradorFullAccessTest` (2 tests) seeding
+  the *real* `PermissionSeeder`/`RoleSeeder` and asserting the actual
+  seeded "Administrador" role — not a synthetic single-permission
+  stand-in — passes every Academic policy ability: `Teacher::create`,
+  `AcademicCredential::create/update`, `AffinityCatalogVersion::create/
+  update/exportPdf/exportExcel`, `TeacherAssignment::create/decide/
+  exportPdf/exportExcel`, `TechnicalNote::create/approve`. This closes
+  a real gap: the existing `TeacherAssignmentAuthorizationTest` only
+  tested permission strings in isolation, never the seeded role that
+  production actually grants them through.
+- **Clarifying docblock** on `CatalogVersionResolverTest` distinguishing
+  which existing test (`test_d5_no_exact_match_applies_the_most_recent_
+  prior_version_as_provisional` and its sibling) covers the
+  professor-confirmed D5 fallback from the one
+  (`test_d6_target_date_before_all_versions_applies_the_earliest_as_
+  provisional`) that covers the still-unconfirmed D6 edge case — no
+  behavior change, both were already tested.
+- **Matrix updates**: DO-02's version-resolution row now states D5 is
+  professor-confirmed and D6 is not; a new DO-02a row documents the
+  specialty-matching rule and cites the new test; a new note under
+  Authorization documents "Administrador has access to everything" and
+  cites `AdministradorFullAccessTest`.
+- **Corrected a stale per-section status** in
+  `FINAL_ACADEMIC_MODULE_AUDIT.md`: DO-02a's own `STATUS: NEEDS
+  PROFESSOR DECISION` header (its only cited reason was the
+  now-resolved specialty-matching question) contradicted that same
+  document's own summary table (`DO-02a | CONFIRMED`) and Section 11.
+  Updated to `STATUS: CONFIRMED` with a dated note; left every other
+  section of that audit untouched.
+- **Committed `FINAL_ACADEMIC_MODULE_AUDIT.md` for the first time.** It
+  existed only as an untracked working-directory file — the prior
+  session's journal entry (2026-08-24, above) said it had been
+  "updated," but that commit (`fe5f313`) only touched this journal, not
+  the audit file itself. Fixed by including it in this batch's commits
+  rather than leaving durable audit content permanently unversioned.
+
+### Rejected
+
+- Refactoring `AffinityCatalogVersion::isAffineToSpecialty()`,
+  `ProposeTeacherAssignmentUseCase`, or any Academic policy — all three
+  already implement exactly what the professor confirmed (exact
+  specialty-ID membership; permission-gated policies with Administrador
+  already holding every official Academic permission). Changing working
+  code to "prove" an already-satisfied rule would be unjustified churn.
+- Semantic/fuzzy/AI-based specialty matching, and matching that also
+  considers `DegreeLevel` — both explicitly ruled out by the professor's
+  clarification.
+- Restricting Administrador from any Coordinadora de Docencia action
+  (Technical Note creation, No Catalog decisions) — the professor
+  confirmed the opposite: Administrador's broader-than-SRS-text access
+  is intentional, not a bug to fix.
+- Reinterpreting or "resolving" the predates-all-versions (D6) catalog
+  edge case as if the professor had answered it — they have not. Left
+  it explicitly unresolved in both the matrix and the audit file,
+  wording it as a separate, distinct question from the D5 fallback the
+  professor did confirm.
+- A broader rewrite of `FINAL_ACADEMIC_MODULE_AUDIT.md` (its DO-01
+  citation gap, DO-02b form-only-validation finding, stale test counts
+  from its own point-in-time session narrative, etc.) — out of this
+  batch's stated scope, which is limited to the three professor-
+  confirmed rules; only the one stale status header was corrected.
+
+### Why
+
+Tests needed to trace directly to the professor's own words (the
+Cybersecurity/Programming example, "Administrador has access to
+everything") so a reviewer can see the confirmation reflected as an
+executable assertion, not just prose. The Administrador test in
+particular needed to exercise the *seeded role*, not a hand-picked
+permission string, because the actual production risk is a future
+`RoleSeeder` edit silently dropping a permission from "Administrador" —
+a synthetic-permission test would not catch that regression.
+
+### Corrections
+
+- The audit file being untracked was discovered only while verifying
+  where the prior session's claimed edits actually landed — `git log
+  --all -- FINAL_ACADEMIC_MODULE_AUDIT.md` returned nothing despite the
+  journal claiming it was updated. Corrected by committing it now
+  rather than silently leaving the discrepancy in place.
+- No test or production-code corrections were needed this batch — the
+  professor-confirmed rules already matched the implemented behavior in
+  full; only test coverage and documentation traceability were gaps.
+
+### Learning
+
+- A decision-journal entry claiming a file was "updated" is not proof
+  the file was committed — `git log --all -- <path>` (or `git status`
+  for stray untracked files) is the independent check, and should be
+  run before trusting a prior entry's own account of what it did.
+- When a batch instruction says "if current code already satisfies
+  this, do not refactor, add tests instead," the highest-value test is
+  usually the one that exercises the *real* seeded/configured state
+  (an actual role from `RoleSeeder`) rather than a synthetic stand-in
+  that only proves the policy's `if` statement is syntactically correct.
