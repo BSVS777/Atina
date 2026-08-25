@@ -418,3 +418,36 @@ The following were open at the time of this audit and have since been **professo
 ### Safely out of scope
 
 Every SIGA/professor-schema module outside DO-01, DO-02, DO-02a, DO-02b, and DO-02d — including classroom/room management, student requests, scheduling/room-change history, document management beyond the Technical Note PDF, enrollment, and grades. None of these appear in the Word statement's functional-requirements section for this team's module.
+
+---
+
+## 14. Addendum — 2026-08-25 (Batch 5: OpenAlex + final technical-stack audit)
+
+The audit above (Sections 1–13) reflects `integration/atina-foundation` @ `387a3d5`. Four batches have landed since — functional/UI closeout, business-rule tests/docs, real TypeScript, real JWT, and now Batch 5 (OpenAlex external REST API). Re-verified against current HEAD rather than assumed carried-over:
+
+| Item flagged above | Status @ `387a3d5` | Status now (verified this session) |
+|---|---|---|
+| DO-01 course-context citation omits carrera, curso only implicit | Gap | **Fixed.** `TeacherProfileComponent::render()` builds `courseContextLabel` as `'{career} · {code} — {name}'`, rendered alongside the version/agreement/gazette citation (`teacher-profile-component.blade.php:27-28`) — see requirements-matrix note "fixed 2026-08-24" |
+| Test count | 85/85 | **202/202 passing** (`php artisan test`, this session) |
+| TypeScript | Missing entirely | **Implemented** — `resources/js/data-table.ts`, real `tsconfig.json`, `npm run typecheck` passes (0 errors), wired into `resources/js/app.js`/Vite (Batch 3) |
+| JWT | Missing entirely | **Implemented** — `routes/api.php`, `Src\IdentityAccess\Authentication\*`, `firebase/php-jwt`, `config/jwt.php`, `AuthenticateJwt` middleware (Batch 4) |
+| External REST API | Missing entirely | **Implemented** — OpenAlex Institutions API (`Src\Academic\AcademicCredential\Infrastructure\Services\OpenAlexInstitutionSearchService`), enrichment-only, never a hard dependency, never affects affinity (Batch 5, this session) |
+| Technical Note ratify/reject not audited | Gap | **Fixed** — `RatifyTechnicalNoteUseCase`/`RejectTechnicalNoteUseCase` both write an `AuditLogEntry` (`ACTION_UPDATED`), confirmed by direct file read this session |
+| Catalog version creation not audited | Gap | **Fixed** — `CreateAffinityCatalogVersionUseCase` writes an `AuditLogEntry` (`ACTION_CREATED`), confirmed by direct file read this session |
+| DO-02b PDF mime-type / non-past deadline enforced only in the Livewire form, not the domain layer | Gap | **Unchanged — still open.** `TechnicalNote`'s constructor still only rejects an empty `documentPath` string (`Domain/Entities/TechnicalNote.php:26-28`); `AttachTechnicalNoteUseCase::handle()` still does `new DateTimeImmutable($dto->ratificationDeadline)` with no guard. Out of this batch's scope (OpenAlex touches `AcademicCredential`, not `TeacherAssignment`/`TechnicalNote`) — carried forward, not silently dropped |
+| D6 (target date predates every catalog version) needs professor confirmation | Open | **Still open** — no new professor answer this session; not to be read as confirmed |
+| Browser verification | Could not connect | **Still could not connect** this session either (Claude-in-Chrome extension reported "not connected") — see the Batch 5 final report for what was verified instead (Livewire component tests + one live `php artisan tinker` call against the real OpenAlex API) |
+
+### Updated Section 5 (Technical Requirements Audit) row-by-row
+
+| Requirement | Current state | Evidence |
+|---|---|---|
+| TypeScript | **Implemented and demonstrable** | `resources/js/data-table.ts`, `tsconfig.json`, `npm run typecheck` — 0 errors this session |
+| External REST API | **Implemented and demonstrable** | `OpenAlexInstitutionSearchService` (Infrastructure adapter) → real `GET https://api.openalex.org/autocomplete/institutions`; `SearchAcademicInstitutionsUseCase` (Application); `InstitutionSearchServiceInterface`/`InstitutionSearchResult`/`InstitutionSearchUnavailableException` (Domain); wired into `TeacherProfileComponent`'s credential modal and an optional JWT-protected `GET /api/institutions/search`; `OpenAlexInstitutionSearchAdapterTest` (8 `Http::fake()` tests covering success + every failure mode); live-verified this session via `php artisan tinker` against the real API (see Batch 5 final report) |
+| JWT | **Implemented and demonstrable** | `routes/api.php`, `config/jwt.php`, `AuthenticateJwt` middleware, `JwtAuthenticationTest` (10 tests) |
+
+**The rubric's "Insuficiente" trigger for two-or-more-missing mandatory technical elements no longer applies** — TypeScript, JWT, and the External REST API are now all present with adapter + config + failure-handling + tests + real application wiring, not decorative stubs.
+
+### Updated Section 13 verdict (superseding the 2026-08-10-session verdict above for current HEAD)
+
+The prior verdict ("C. MODULE HAS FUNCTIONAL GAPS") was driven primarily by three entirely-absent mandatory technologies plus the DO-01 citation gap. All four are now resolved. The one concrete gap that survives unchanged is DO-02b's form-only (not domain-enforced) PDF/deadline validation — a real but narrow gap, not a missing capability. Browser verification remains unconfirmed in this environment across every session that has attempted it. See the Batch 5 final report (delivered alongside this document) for the current-session final verdict letter and the full requirement-by-requirement evidence table.

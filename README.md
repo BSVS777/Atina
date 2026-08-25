@@ -141,10 +141,59 @@ check failed. `/api/me` reuses the existing RBAC model
 (`App\Concerns\HasRolesAndPermissions`) directly; there is no separate
 authorization system for the API.
 
-**Not implemented in this slice:** the external REST API integration
-described in the SRS is a separate, professor-selected requirement — this
-JWT layer is the authentication boundary a future integration would sit
-behind, not that integration itself.
+## External REST API (OpenAlex institution search)
+
+The professor did not prescribe a specific external REST API, so the
+project chose [OpenAlex](https://api.openalex.org)'s Institutions
+autocomplete endpoint (`GET /autocomplete/institutions?q=`) — real
+academic-institution data, directly relevant to the Academic Credential →
+Institution field it assists.
+
+```text
+Institution input (credential form)
+    ↓ Livewire debounce
+SearchAcademicInstitutionsUseCase                 (Application)
+    ↓
+InstitutionSearchServiceInterface                 (Domain contract)
+    ↓
+OpenAlexInstitutionSearchService                   (Infrastructure adapter)
+    ↓
+GET https://api.openalex.org/autocomplete/institutions?q=...
+```
+
+This is enrichment-only: it assists filling in the existing `institution`
+field and is never a hard dependency for creating or editing an academic
+credential, and it never participates in affinity decisions (Atinente / No
+Atinente / Nota técnica / Sin catálogo). If OpenAlex is slow,
+unreachable, misconfigured, or rate-limited, the credential form falls
+back to manual typing with a concise non-blocking message — see
+`OpenAlexInstitutionSearchService` and
+`Src\Academic\AcademicCredential\Domain\Exceptions\InstitutionSearchUnavailableException`.
+
+Environment variables (see `.env.example`):
+
+| Variable | Purpose |
+|---|---|
+| `OPENALEX_BASE_URL` | REST base (default `https://api.openalex.org`). |
+| `OPENALEX_API_KEY` | Optional — basic lookup works without one. Read server-side only (`config/openalex.php`), never sent to the browser. |
+| `OPENALEX_TIMEOUT` | Request timeout in seconds, bounded to 1–15 (default `5`). |
+| `OPENALEX_INSTITUTION_LIMIT` | Max suggestions returned, bounded to 1–20 (default `8`). |
+| `OPENALEX_CACHE_TTL` | Seconds an identical normalized query is cached for, using the app's default cache store (default `900`). |
+
+A read-only JWT-protected endpoint reuses the same use case, to
+demonstrate the API boundary without duplicating logic:
+
+```bash
+curl "http://localhost:8000/api/institutions/search?q=Universidad" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer <access_token>"
+# => {"results":[{"externalId":"https://openalex.org/I31944674","name":"Universidad de Costa Rica","hint":"San José, Costa Rica","countryCode":null,"rorId":"https://ror.org/02yzgww51"}]}
+```
+
+Automated tests use `Http::fake()` exclusively — see
+`tests/Feature/Academic/OpenAlexInstitutionSearchAdapterTest.php` and
+`tests/TestCase.php` (`Http::preventStrayRequests()` is enabled globally so
+no test can accidentally depend on live Internet access).
 
 ## Scheduled tasks
 

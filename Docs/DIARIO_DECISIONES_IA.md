@@ -2225,3 +2225,244 @@ relations.
   `php artisan test` run, not by static analysis — a concrete argument
   for the harness's "independent verification" requirement even on
   code that type-checks.
+
+---
+
+## 2026-08-25 — Batch 5: OpenAlex external REST API integration + final audit
+
+### AI consultation
+
+User asked to implement
+`Docs/Atina_Implementation_Prompt_Batches/05_BATCH_OPENALEX_EXTERNAL_API_AND_FINAL_AUDIT.md`:
+select and wire in the project's external REST API requirement (left
+open since Batch 4's journal entry: "External REST API → pending
+professor selection"), then perform a final functional/technical audit
+against the official requirements. The professor did not prescribe a
+provider, so the batch itself proposed OpenAlex's Institutions API as a
+domain-relevant, defensible choice and asked it to be implemented as
+enrichment only — never a hard dependency, never a factor in affinity.
+
+### Pre-flight findings
+
+- Batch 4 (JWT) confirmed present and green on `integration/atina-foundation`
+  (`5ae4e06`), 4 commits ahead of `origin`; `routes/api.php` carried
+  `POST /api/auth/login` and `GET /api/me` behind `jwt.auth` only.
+- `Src\Academic\AcademicCredential` already had the exact
+  `Domain/Application/Infrastructure/Presentation` shape this batch
+  needed to extend: `Domain/Contracts/AcademicCredentialRepositoryInterface`,
+  `Application/UseCases/*`, `Presentation/Livewire/Forms/AcademicCredentialForm`
+  consumed by `Src\Academic\Teacher\Presentation\Livewire\TeacherProfileComponent`
+  (the credential create/edit modal). No existing `institution` lookup
+  of any kind.
+- `DomainServiceProvider` already had a precedent for a config-built
+  singleton binding that can't go through the plain interface→class
+  array (`TokenServiceInterface` ← `JwtTokenService`, built from
+  `config('jwt.*')`) — the new `InstitutionSearchServiceInterface`
+  binding follows the same pattern.
+- `tests/TestCase.php` had no global HTTP safety net — nothing prevented
+  a test from making a real outbound request. Since the new
+  `updatedFormInstitution()` Livewire hook fires on *any* property
+  update of `form.institution` (including Livewire's `->set(...)` in
+  tests, not only real debounced typing), every pre-existing test that
+  did `->set('form.institution', 'UTN')` (3 characters — meets the new
+  minimum-query-length) would now trigger a real search unless guarded.
+
+### Accepted
+
+- **OpenAlex Institutions API** (`GET /autocomplete/institutions?q=`),
+  no API key required for basic lookup. Chosen for direct domain
+  relevance (Teacher → Academic credential → Institution → OpenAlex
+  institution lookup) and because it needs no signup/secret to
+  demonstrate live in the oral defense.
+- New Domain-owned, provider-neutral contract in the `AcademicCredential`
+  context: `Domain\Contracts\InstitutionSearchServiceInterface::search(string $query, int $limit): list<InstitutionSearchResult>`,
+  `Domain\InstitutionSearchResult` (externalId, name, hint, countryCode,
+  rorId — no raw OpenAlex fields), `Domain\Exceptions\InstitutionSearchUnavailableException`.
+- `Application\UseCases\SearchAcademicInstitutionsUseCase`: trims/normalizes
+  whitespace, enforces `MIN_QUERY_LENGTH = 3` before ever calling the
+  port, bounds the limit to `MAX_LIMIT = 20`. No HTTP code, no affinity
+  logic.
+- `Infrastructure\Services\OpenAlexInstitutionSearchService`: the only
+  class in the context allowed to import `Illuminate\Support\Facades\Http`
+  or know OpenAlex's response shape. Wraps the whole HTTP call in a
+  broad `catch (\Throwable)` (not just `ConnectionException`) — see
+  "Corrections" below for why this had to be broad, not narrow. Caches
+  successful results per normalized-query+limit via the app's default
+  cache store (`Cache::remember`, TTL from `openalex.cache_ttl`,
+  default 900s) — a failure is never cached, since `Cache::remember`
+  only stores a value if the closure returns normally.
+- `config/openalex.php` (`base_url`, `api_key`, `timeout` bounded 1–15s,
+  `institution_limit` bounded 1–20, `cache_ttl`); `.env.example` and
+  local `.env` both document `OPENALEX_*`.
+- `DomainServiceProvider` binds `InstitutionSearchServiceInterface` as a
+  singleton built from `config('openalex.*')`, same shape as the
+  existing `TokenServiceInterface` binding.
+- `TeacherProfileComponent` (not a new nested Livewire component — same
+  reasoning the file's own docblock already gives for keeping credential
+  management on one component) gained `updatedFormInstitution(string $value)`,
+  `selectInstitution(string $name)`, and three public properties
+  (`institutionSuggestions`, `institutionSearchUnavailable`,
+  `institutionSearchPerformed`). The Institution `<input>` switched from
+  `wire:model` (deferred) to `wire:model.live.debounce.400ms`. Selecting
+  a suggestion just writes into the existing `form.institution` string —
+  no new field, no required selection, manual typing always still works.
+- Optional read-only `GET /api/institutions/search?q=` behind `jwt.auth`,
+  reusing `SearchAcademicInstitutionsUseCase` directly (no duplicated
+  logic) — added because the batch explicitly invited it as a way to
+  demonstrate the JWT boundary on a second endpoint. A provider outage
+  returns `200 {"results": [], "message": "..."}`, not a 5xx: the API
+  boundary keeps the same "enrichment, not a hard dependency" contract
+  the UI has.
+- `Http::preventStrayRequests()` added globally in `tests/TestCase.php`
+  — every test now fails fast (not by making a real network call) if it
+  triggers an HTTP request with no matching `Http::fake()`. See
+  "Corrections."
+
+### Rejected
+
+- A generic checkbox/quotes/placeholder REST API with no domain
+  relevance — the batch itself steered away from this, and it would not
+  survive "why this API?" in the oral defense.
+- Calling OpenAlex directly from browser JavaScript/TypeScript — every
+  request goes through Laravel; the browser never sees `OPENALEX_API_KEY`
+  (which stays server-side in `config/openalex.php`, never rendered to
+  Blade).
+- Requiring a selected suggestion before saving, or persisting the raw
+  OpenAlex payload — the existing `atestados.institucion` column remains
+  the single source of truth; no new migration/column was added.
+- Letting OpenAlex results influence `AffinityCatalogVersion::isAffineToSpecialty()`
+  or any DO-02a outcome in any way — the search use case and the
+  affinity-matching domain share no code path; verified by grep (no
+  cross-import) and by a dedicated test
+  (`test_institution_search_does_not_touch_course_affinity_context`).
+- A dedicated `InstitutionSearchComponent` nested Livewire component —
+  would only add inter-component wiring for a feature that lives
+  entirely inside the one existing credential modal.
+- Redis / a new cache backend for the suggestion cache — the existing
+  default cache store (`database` in production, `array` in tests) is
+  enough for a 900-second TTL on a low-traffic autocomplete feature.
+
+### Why
+
+Institution search sits one hop from the existing Institution field and
+nowhere near the affinity pipeline, so it was straightforward to keep it
+fully outside the trust boundary that decides Atinente/No
+Atinente/Nota técnica/Sin catálogo: the port returns plain data, the use
+case does no business reasoning, and the adapter converts every failure
+mode into one exception type the Presentation layer already knows how to
+treat as "keep going, let the user type manually." Hexagonal Architecture
+made this a genuinely small change — Domain/Application don't know
+OpenAlex exists, so if the provider were swapped out later,
+`TeacherProfileComponent` and `SearchAcademicInstitutionsUseCase` would
+not change at all.
+
+### Corrections
+
+- **First adapter version caught only `Illuminate\Http\Client\ConnectionException`.**
+  Realized while writing tests that `updatedFormInstitution()` fires on
+  Livewire's `->set('form.institution', ...)` in tests exactly like a
+  real debounced keystroke does — meaning every pre-existing test that
+  sets a 3+ character institution (`AcademicCredentialAuditTest`,
+  `AcademicCredentialAuthorizationTest`, all using `'UTN'`/`'UCR'`/`'UNA'`)
+  would now make the component call the real adapter. Without
+  `Http::fake()` in those tests, and with the new `Http::preventStrayRequests()`
+  safety net in place, the client throws `Illuminate\Http\Client\StrayRequestException`
+  (a `\RuntimeException`, not a `ConnectionException`) — which the
+  narrow catch would have let escape uncaught, breaking every one of
+  those tests. Fixed by broadening the adapter's catch to `\Throwable`
+  around the HTTP call specifically (not around JSON parsing, which is
+  handled by explicit `is_array`/key checks instead) — this is also
+  simply more correct against the batch's own "handle all of the
+  following gracefully" list, which is not limited to connection
+  errors.
+- **First `collect(...)->filter()->values()->all()` chain failed PHPStan**
+  (`level: 7`): Larastan could not narrow the Collection's generic
+  return type to `list<InstitutionSearchResult>` through that method
+  chain. Fixed by wrapping the whole chain in `array_values(...)`
+  instead of relying on `->values()`, which PHPStan recognizes as
+  producing a genuine list.
+
+### Follow-up / visible risk
+
+- No rate limiting on `/api/institutions/search` beyond OpenAlex's own
+  429 (which the adapter already treats as "unavailable") — matches the
+  same out-of-scope note already recorded for `/api/auth/login` in the
+  Batch 4 entry.
+- `countryCode` is always `null` in the current mapping: OpenAlex's
+  `/autocomplete/institutions` payload does not reliably expose a
+  country code field (only `hint`, which is a free-text location
+  string) — documented as a known gap rather than guessed at with a
+  fragile parse of `hint`.
+- D6 (target date predates every catalog version) remains unresolved,
+  unchanged by this batch — still not to be read as professor-confirmed;
+  see the DO-02 row in `Docs/ACADEMIC_AFFINITY_REQUIREMENTS_MATRIX.md`.
+- Browser walkthrough could not be performed in this environment — the
+  Claude-in-Chrome extension was not connected (see the final report for
+  this batch). All UI behavior was instead verified via Livewire
+  component tests plus one live `php artisan tinker` call through the
+  real use case against the real OpenAlex API (see Verification).
+
+### Verification
+
+- New tests (25 total, all passing): `SearchAcademicInstitutionsUseCaseTest`
+  (5, unit, fake port — short/whitespace queries never reach the port,
+  normalization, limit bounding), `OpenAlexInstitutionSearchAdapterTest`
+  (8, `Http::fake()` — correct endpoint/query, successful mapping with no
+  raw-payload leak, empty results are not a failure, connection failure,
+  429, 500, malformed JSON, unexpected shape), `AcademicCredentialInstitutionSearchTest`
+  (7, Livewire — short query never calls the provider, suggestions
+  render, selecting a suggestion populates the field, manual entry
+  saves, a provider outage does not block saving, an institution not
+  among the suggestions still saves, search does not touch
+  `contextCourseId`/affinity context), `InstitutionSearchApiTest` (5 —
+  missing/invalid JWT → 401, valid JWT + valid `q` → 200 with
+  provider-neutral JSON, valid JWT + `q` under the minimum length → 422,
+  provider outage → 200 with an empty result set).
+- `php artisan test` — **202/202 passing** (up from 177 after Batch 4),
+  including every pre-existing Academic/RBAC/Auth test unchanged and
+  still green.
+- `./vendor/bin/phpstan analyse --memory-limit=1G` — 0 errors.
+- `./vendor/bin/pint --test` — every file this batch touched or created
+  is clean. Remaining repo-wide failures are pre-existing baseline drift
+  on files this batch never touched (`DDDStructure.php`, `Logout.php`,
+  `FortifyServiceProvider.php`, `RoleComponent.php`, `PermissionDTO.php`,
+  `RoleDTO.php`, etc. — confirmed via `git status`).
+- `npm run typecheck` — 0 errors. `npm run build` — succeeds.
+- `php artisan route:list` — `GET|HEAD api/institutions/search` present
+  behind `jwt.auth`, alongside the unchanged `api/auth/login`/`api/me`.
+- `php artisan migrate:status` — unchanged; no new migration was added,
+  confirming no new column was needed.
+- Architecture gate: `grep` across `src/Academic/AcademicCredential/{Domain,Application}`
+  and `src/Shared` for `^use Illuminate`/`^use Livewire`/`^use Guzzle` —
+  zero matches.
+- **Live OpenAlex verification (real Internet, not `Http::fake()`):**
+  `Invoke-RestMethod` against `https://api.openalex.org/autocomplete/institutions?q=Universidad%20de%20Costa%20Rica`
+  returned a real result (`Universidad de Costa Rica`, `San José, Costa
+  Rica`, ROR `https://ror.org/02yzgww51`). Then, separately, ran the
+  *actual* application code path live via `php artisan tinker`
+  (`app(SearchAcademicInstitutionsUseCase::class)->handle(...)`,
+  bypassing `Http::fake()` entirely) against the same query — one real
+  result returned and correctly mapped into `InstitutionSearchResult`,
+  confirming the Use Case → Port → Adapter → real OpenAlex path works
+  end to end, not just the adapter in isolation.
+- Browser walkthrough: **UNVERIFIED IN THIS ENVIRONMENT** — the
+  Claude-in-Chrome extension reported "not connected" when queried; no
+  UI screenshot/interaction was captured, so this is reported as not
+  done rather than assumed to work from the passing Livewire tests
+  alone.
+
+### Learning
+
+External integrations should enrich a workflow, not gate it, unless a
+requirement explicitly demands otherwise — the concrete mechanism for
+that in this codebase was making the *type system* enforce it: the
+Domain contract returns a plain list (never throws for "no matches"),
+and the one exception type that does exist
+(`InstitutionSearchUnavailableException`) is caught exactly once, at the
+Presentation boundary, and turned into a UI state rather than a
+validation error. The Livewire testing surprise (`->set()` firing the
+same `updated*` hooks a real keystroke would) is also a reusable lesson
+for this codebase specifically: any future debounced/live Livewire
+property tied to an external call needs the same `Http::preventStrayRequests()`
+discipline in `tests/TestCase.php` from day one, not bolted on after the
+fact.
