@@ -3207,3 +3207,87 @@ without CI actually running `npm run typecheck`, a broken `.ts` file
 would still pass CI as long as Vite could transpile it, since `vite
 build` strips types rather than checking them. The gate only exists if
 something in the pipeline calls `tsc --noEmit`.
+
+## 2026-08-25 — Fatal error proposing a teacher: pending migration, not legacy null data
+
+### Asked
+
+Reproduce and fix a real manual-workflow crash: `Call to a member function
+format() on null` at `EloquentAcademicCredentialRepository.php:83`, hit
+while proposing a teacher (Verificación de Atinencias). The request
+assumed this was legacy/institutional data with legitimately null
+`fecha_inicio`/`fecha_fin`, and asked for a full nullability audit plus a
+domain-model decision (nullable `StudyPeriod`, partial dates, or
+derivation) to represent that state.
+
+### Rejected
+
+- The premise itself. `php artisan migrate:status` showed
+  `2026_08_25_205807_replace_year_obtained_with_study_period_in_atestados`
+  (added in the immediately preceding commit) as **Pending** — never run
+  against the dev SQLite DB. `atestados.anio_obtencion` was `NOT NULL`
+  since the table's original migration, the backfill migration converts it
+  to non-null `fecha_inicio`/`fecha_fin` for every row, and the factory
+  always sets both dates. There is no code path in this repo that produces
+  a genuinely null study period once migrations are current. The crash was
+  Eloquent returning `null` for a column that plain didn't exist yet on
+  this environment's table — not a legitimate legacy-data state.
+- Any nullable-`StudyPeriod` domain redesign (Option A/B/C/D from the
+  brief): would have weakened a correct `NOT NULL` invariant to paper over
+  a deployment-drift bug. Confirmed with the user before proceeding and
+  descoped the rest of the originally-requested enterprise-wide 26-part
+  audit accordingly (schema/data audit across the whole app, PDF/XLSX/
+  OpenAlex sweep, browser QA checklist, `DATA_COMPATIBILITY_AUDIT.md`)
+  since it was built on the same false premise.
+
+### Accepted
+
+- Ran the pending migration (`php artisan migrate`) — the concrete fix for
+  the reported crash.
+- Added `CorruptCredentialRecordException::missingStudyPeriod()` (Domain
+  exception, same static-factory pattern as `CredentialNotFoundException`/
+  `DuplicateCredentialException` in this same context) and a guard in
+  `EloquentAcademicCredentialRepository::toDomain()` that throws it instead
+  of dereferencing a null Carbon. This turns a future schema-drift
+  incident (e.g. a migration deployed but not yet run somewhere) into a
+  clear, logged, actionable error instead of a bare null-pointer fatal —
+  without weakening the `NOT NULL` contract or the `Carbon` (non-nullable)
+  PHPDoc type.
+- The guard reads `$model->getRawOriginal(...)` rather than the casted
+  `$model->fecha_inicio` property: PHPStan treats the model's own
+  `@property Carbon $fecha_inicio` docblock as certain, so comparing the
+  casted property to `null` is correctly flagged as always-false dead
+  code. Reading the raw attribute sidesteps that without loosening the
+  docblock (which would falsely tell every other consumer of this model
+  that the columns are nullable).
+- Deleted `tests/Unit/Academic/YearObtainedTest.php`: dead test for the
+  `YearObtained` class removed by the same prior commit that introduced
+  `StudyPeriod`, already fully superseded by `StudyPeriodTest.php`. It was
+  failing on `main` independent of this session's change.
+
+### Verification
+
+- New regression test
+  (`tests/Feature/Academic/EloquentAcademicCredentialRepositoryTest.php`):
+  one control case (fully-dated credential hydrates correctly through the
+  real repository) and one fault case (an Eloquent model instance with
+  `fecha_inicio`/`fecha_fin` unset, reflected into the private `toDomain`,
+  asserts `CorruptCredentialRecordException` — this state is otherwise
+  unreachable through the public API once the `NOT NULL` constraint is
+  enforced, which is the point).
+- `php artisan test`: 398/398 passing, 869 assertions (was 403 tests/2
+  failures/3 errors before deleting the stale `YearObtainedTest`).
+- `./vendor/bin/phpstan analyse --memory-limit=1G`: 0 errors.
+- `./vendor/bin/pint --test` on touched files: clean.
+- Confirmed no real null data existed: after migrating, all 15 dev rows in
+  `atestados` have non-null `fecha_inicio`/`fecha_fin` (backfilled from
+  `anio_obtencion` where a real date wasn't already present).
+
+### Learning
+
+A green test suite backed by a migrated in-memory SQLite DB
+(`phpunit.xml`'s `DB_DATABASE=:memory:`) will never notice a migration
+that was committed but never run against a real dev/prod database — tests
+always see the fully-migrated schema, so this exact class of drift is
+structurally invisible to `php artisan test` alone. `migrate:status` is
+the check that actually catches it.
