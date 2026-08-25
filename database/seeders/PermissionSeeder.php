@@ -4,44 +4,20 @@ namespace Database\Seeders;
 
 use App\Models\Permission;
 use Illuminate\Database\Seeder;
+use Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalog;
 
 class PermissionSeeder extends Seeder
 {
     /**
-     * Actions available for every manageable module.
-     *
-     * @var array<int, string>
-     */
-    private const ACTIONS = [
-        'create',
-        'view',
-        'edit',
-        'delete',
-        'search',
-        'export_pdf',
-        'export_excel',
-    ];
-
-    /**
-     * SIGA-specific manageable modules (its own admin UI, not part of the
-     * professor-provided institutional schema). Extend as new manageable
-     * modules are added.
-     *
-     * @var array<int, string>
-     */
-    private const MODULES = ['roles', 'permissions'];
-
-    /**
-     * The 16 permissions already seeded in the professor-provided
-     * `gestion_academica_utn_test` database (name => description),
-     * reproduced verbatim so a fresh environment's RBAC substrate matches
-     * production. Business-verb names (not SIGA's create/view/edit/...
-     * convention) because they are external data, not code this project
-     * controls — see Docs/DIARIO_DECISIONES_IA.md.
+     * Human-readable descriptions for the institutional permissions,
+     * verbatim from the professor-provided `gestion_academica_utn_test`
+     * database — see Docs/DIARIO_DECISIONES_IA.md. Permissions without an
+     * entry here (SIGA's own roles/permissions admin actions) seed with
+     * no description.
      *
      * @var array<string, string>
      */
-    private const OFFICIAL_PERMISSIONS = [
+    private const DESCRIPTIONS = [
         'atestados.gestionar' => 'Crear y editar atestados de docentes',
         'catalogo.gestionar' => 'Crear versiones del catálogo de atinencias',
         'oferta.gestionar' => 'Gestionar la oferta académica',
@@ -60,24 +36,22 @@ class PermissionSeeder extends Seeder
         'solicitudes.revisar' => 'Revisar solicitudes',
     ];
 
+    /**
+     * Seeds exactly the closed set PermissionCatalog describes — the
+     * catalog is the single source of truth for which (module, action)
+     * pairs exist; this seeder no longer keeps its own copy of that list.
+     */
     public function run(): void
     {
-        foreach (self::MODULES as $module) {
-            foreach (self::ACTIONS as $action) {
+        foreach (PermissionCatalog::all() as $module => $actions) {
+            foreach ($actions as $action) {
+                $name = "{$module}.{$action}";
+
                 Permission::query()->firstOrCreate(
-                    ['name' => "{$module}.{$action}"],
-                    ['module' => $module, 'action' => $action],
+                    ['name' => $name],
+                    ['module' => $module, 'action' => $action, 'description' => self::DESCRIPTIONS[$name] ?? null],
                 );
             }
-        }
-
-        foreach (self::OFFICIAL_PERMISSIONS as $name => $description) {
-            [$module, $action] = explode('.', $name, 2);
-
-            Permission::query()->firstOrCreate(
-                ['name' => $name],
-                ['module' => $module, 'action' => $action, 'description' => $description],
-            );
         }
     }
 }

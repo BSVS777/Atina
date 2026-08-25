@@ -1568,3 +1568,165 @@ proving anything about real integration.
   to type an Alpine `x-data` factory's magic properties (`$watch`,
   `$refs`, ...) without forcing every unrelated getter/method in the
   same object literal to also declare a wider `this` type it never uses.
+
+---
+
+## 2026-08-25 — RBAC hardening: controlled Module/Action selection for the Permission editor
+
+### AI consultation
+
+The Permission create/edit modal let an admin type `module` and `action`
+as free text. Nothing stopped a typo (`atinencias.verificar` instead of
+`atinencia.verificar`) from becoming a real, unique-constrained database
+row that no Policy or Seeder ever checks — an orphaned, silently
+useless permission indistinguishable in the UI from a real one. The
+task was to close that gap without introducing JWT/external-API work
+or touching the Academic module.
+
+### Accepted
+
+- **`PermissionCatalog`** (`src/IdentityAccess/Permission/Domain/ValueObjects/PermissionCatalog.php`),
+  a pure-PHP, framework-free value object holding the single source of
+  truth for which `(module, action)` pairs are official: the 2
+  SIGA-own manageable modules (`roles`, `permissions`) crossed with the
+  7 shared CRUD actions, merged with the 16 institutional permissions
+  already hardcoded in `PermissionSeeder` (`atestados.gestionar`,
+  `atinencia.verificar`, `oferta.gestionar`/`consultar`/`consolidar`,
+  etc.). `PermissionSeeder` now iterates `PermissionCatalog::all()`
+  instead of keeping its own `MODULES`/`ACTIONS` arrays — one place
+  defines the vocabulary, not four.
+- **Domain-level enforcement, not just UI.** `Permission::create()`
+  now throws `InvalidPermissionException` for any `(module, action)`
+  outside the catalog — the backstop below Presentation validation, so
+  it holds even if a future caller skips the Livewire form entirely.
+  `Permission::redefine()` (used only by `UpdatePermissionUseCase`) now
+  throws `PermissionIsProtectedException` for any attempt to change an
+  already-persisted permission's module/action; saving the unchanged
+  pair is a harmless no-op. `Permission::reconstitute()` deliberately
+  skips catalog validation — a pre-existing/legacy row outside the
+  catalog must still load to be viewed/reported/deleted, never crash
+  the list.
+- **Controlled Módulo/Acción `<select>`s.** The Livewire modal
+  (`permission-component.blade.php`) replaces both free-text `<input>`s
+  with `<select>`s sourced from `PermissionCatalog::modules()` /
+  `::actionsFor($form->module)`. `PermissionForm::updatedModule()`
+  (Livewire's Form-object hook, resolved from `form.module`'s dotted
+  path) clears `action` when it's no longer valid for the newly
+  selected module. A read-only "Nombre" preview shows the derived
+  `module.action` string live — never a field the user types into.
+- **Server-side validation mirrors the catalog, but only on create.**
+  `PermissionForm::rules()` adds `Rule::in(PermissionCatalog::modules())`
+  / `Rule::in(PermissionCatalog::actionsFor($this->module))`, gated to
+  `$component->editingId === null`. Editing skips the catalog
+  `Rule::in` deliberately — module/action are read-only in the UI
+  (`@disabled($editingId !== null)`, same pattern already used by
+  `AffinityCatalogComponent`'s course select) and protected at the
+  Domain level regardless; re-validating catalog membership on an
+  unchanged value would wrongly block re-saving a legacy row that
+  happens to sit outside the catalog.
+- **`PermissionComponent::save()`** now wraps both branches in a
+  try/catch for `InvalidPermissionException`/`PermissionIsProtectedException`,
+  mirroring `RoleComponent`'s existing `RoleIsProtectedException`
+  handling — a forged Livewire request gets a Spanish toast, not a 500.
+- **`PermissionLabelFormatter`** gained `moduleLabel()`/`actionLabel()`
+  (extracted from `forHumans()`) plus entries for all 14 catalog
+  modules/15 catalog actions, so the new selects and the pre-existing
+  Role-modal permission checklist share one label map instead of two.
+  `forHumans()`'s exact output ("Exportar PDF de roles", "Editar
+  permisos", ...) is preserved byte-for-byte via a small preposition
+  rule, since nothing about display wording needed to change.
+- Read-only inspection of the real `gestion_academica_utn` database
+  (see Verification) confirmed all 30 existing permission rows already
+  match the catalog exactly — no legacy/unrecognized rows to report or
+  migrate.
+
+### Rejected
+
+- **Arbitrary free-text module/action** — the entire point of this
+  pass; removed from the UI and rejected server-side.
+- **Frontend-only validation** — `<select>` options alone don't stop a
+  forged Livewire request; `Rule::in()` plus the Domain-level guards
+  are what actually enforce it.
+- **Silent typo normalization** (e.g. auto-slugging or fuzzy-matching
+  a mistyped module to the nearest catalog entry) — the brief is
+  explicit that arbitrary text should be rejected, not guessed at.
+- **Unrestricted renaming of an existing permission** — `redefine()`
+  now refuses any module/action change on a persisted row, full stop,
+  rather than trying to distinguish "official" from "custom" rows
+  (there's no meaningful distinction left once creation is
+  catalog-gated: every row that can exist is, by construction, a
+  catalog entry).
+- **A separate "display label" column** — not needed; `description`
+  already exists in the schema/model but was already out of scope for
+  the Domain entity/Form before this change, and the task didn't ask
+  for it.
+
+### Why
+
+Permission `module.action` strings are authorization contracts —
+`RoleSeeder::OFFICIAL_ROLE_PERMISSIONS` and every Policy method
+reference them by exact string. An editable free-text pair made it
+possible to create a row that looks like a real permission but that no
+code path checks, or to break a real one by "fixing a typo" that
+happened to be intentional. Constraining both fields to the same
+closed vocabulary the Seeder and Policies already use — enforced at
+the Domain layer, not just the browser — makes an invalid or orphaned
+permission structurally impossible to create through the UI.
+
+### Corrections
+
+None — this was new hardening work on an existing, un-tested editor
+(no prior Role/Permission test coverage existed in the repo before
+this batch).
+
+### Learning
+
+- Livewire's `SupportFormObjects::update()` resolves an `updated{Studly}`
+  hook on the Form object itself for a `form.module`-style nested
+  property (studly-cased from the path after the first dot) — no
+  wiring needed on the owning component, unlike the top-level-property
+  `updated{Property}` hooks used elsewhere in this codebase
+  (`AffinityCatalogComponent::updatedSelectedCourseId()`).
+- Authorization configuration must be constrained by the same
+  canonical vocabulary the Policies and Seeders already use — a closed
+  enum/catalog is the right shape once "what counts as valid" stops
+  being open-ended, per `Docs/Guia-CRUD-SIGA-UTN.md`'s documented (if
+  rarely used) `Domain/ValueObjects/` folder.
+
+### Verification
+
+- New tests: `tests/Unit/IdentityAccess/PermissionCatalogTest.php` (7),
+  `tests/Unit/IdentityAccess/PermissionEntityTest.php` (7),
+  `tests/Feature/IdentityAccess/PermissionManagementTest.php` (10) —
+  valid create, derived name, unofficial module rejected, action not
+  belonging to module rejected, duplicate rejected, dependent-select
+  reset/preserve behavior, edit-mode render, forged-rename rejection
+  via direct Livewire component-state manipulation (bypassing the
+  disabled `<select>`s), and a seeding-regression check (30 rows,
+  Administrador's institutional permissions unchanged).
+- `php artisan test` — 152/152 passing (up from 128; all pre-existing
+  tests still pass unmodified).
+- `./vendor/bin/phpstan analyse --memory-limit=1G` — 0 errors.
+- `./vendor/bin/pint --test` — fails, but only on files this batch
+  never touched, plus 3 residual fixers on `PermissionComponent.php`
+  (`concat_space`, `unary_operator_spaces`, `not_operator_with_successor_space`)
+  that also appear identically on the untouched `RoleComponent.php` —
+  confirmed pre-existing, repo-wide Pint/config drift, not introduced
+  here (the one fixer this diff did trigger, `no_unused_imports` on an
+  unused `PermissionCatalog` import, was fixed).
+- `npm run typecheck` — 0 errors (no `.ts` files touched).
+- `npm run build` — succeeds.
+- Read-only query against the real `gestion_academica_utn` MySQL
+  database: all 30 existing `permissions` rows match
+  `PermissionCatalog` exactly — 0 legacy/unrecognized rows.
+- Browser/E2E verification was attempted but not completed: the Claude
+  Chrome extension reported not connected (same limitation recorded in
+  the 2026-08-24 TypeScript-migration entry). `php artisan serve` +
+  `curl` confirmed the app boots, `/` returns 200, and `/permissions`
+  correctly redirects an unauthenticated guest — but this app's login
+  form is a Livewire component on the home route (`Fortify::loginView`
+  redirects `/login` to `route('home')`), so a full curl-scripted login
+  walk was not attempted, same reasoning as the prior entry. Manual
+  browser verification of the Permission screen (Módulo/Acción selects,
+  dependent reset, read-only edit mode) is still recommended before
+  considering this fully closed.

@@ -18,6 +18,8 @@ use Src\IdentityAccess\Permission\Application\UseCases\FindPermissionUseCase;
 use Src\IdentityAccess\Permission\Application\UseCases\ListPermissionsUseCase;
 use Src\IdentityAccess\Permission\Application\UseCases\UpdatePermissionUseCase;
 use Src\IdentityAccess\Permission\Domain\Entities\Permission;
+use Src\IdentityAccess\Permission\Domain\Exceptions\InvalidPermissionException;
+use Src\IdentityAccess\Permission\Domain\Exceptions\PermissionIsProtectedException;
 use Src\IdentityAccess\Permission\Presentation\Livewire\Forms\PermissionForm;
 use Src\Shared\Export\Contracts\ExcelExporterInterface;
 use Src\Shared\Export\Contracts\PdfExporterInterface;
@@ -77,16 +79,22 @@ class PermissionComponent extends Component
     {
         $this->form->validate();
 
-        if ($this->editingId === null) {
-            $this->authorize('create', Permission::class);
-            $createUseCase->handle($this->form->toDto());
-        } else {
-            // PermissionPolicy::update() needs an actual Permission
-            // instance as its 2nd parameter, same reasoning as
-            // RoleComponent::save() — Permission::class alone isn't
-            // enough for Laravel to call it.
-            $this->authorize('update', $findUseCase->handle($this->editingId));
-            $updateUseCase->handle($this->editingId, $this->form->toDto());
+        try {
+            if ($this->editingId === null) {
+                $this->authorize('create', Permission::class);
+                $createUseCase->handle($this->form->toDto());
+            } else {
+                // PermissionPolicy::update() needs an actual Permission
+                // instance as its 2nd parameter, same reasoning as
+                // RoleComponent::save() — Permission::class alone isn't
+                // enough for Laravel to call it.
+                $this->authorize('update', $findUseCase->handle($this->editingId));
+                $updateUseCase->handle($this->editingId, $this->form->toDto());
+            }
+        } catch (InvalidPermissionException|PermissionIsProtectedException $e) {
+            $this->dispatch('toast', variant: 'danger', text: $e->getMessage());
+
+            return;
         }
 
         $this->showModal = false;

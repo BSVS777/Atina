@@ -71,14 +71,29 @@
     <x-ui.modal :show="$showModal" :title="$editingId === null ? __('New permission') : __('Edit permission')">
         <div class="form-field">
             <label for="permModule">{{ __('Module') }}</label>
-            <input type="text" id="permModule" wire:model="form.module" placeholder="{{ __('E.g. roles') }}" class="{{ $errors->has('form.module') ? 'has-error' : '' }}">
+            <select id="permModule" wire:model.live="form.module" class="{{ $errors->has('form.module') ? 'has-error' : '' }}" @disabled($editingId !== null)>
+                <option value="">{{ __('Select a module') }}</option>
+                @foreach (\Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalog::modules() as $module)
+                <option value="{{ $module }}">{{ \Src\IdentityAccess\Permission\Presentation\Support\PermissionLabelFormatter::moduleLabel($module) }}</option>
+                @endforeach
+            </select>
             @error('form.module') <span class="form-error">{{ $message }}</span> @enderror
         </div>
 
         <div class="form-field">
             <label for="permAction">{{ __('Action') }}</label>
-            <input type="text" id="permAction" wire:model="form.action" placeholder="{{ __('E.g. edit') }}" class="{{ $errors->has('form.action') ? 'has-error' : '' }}">
+            <select id="permAction" wire:model="form.action" class="{{ $errors->has('form.action') ? 'has-error' : '' }}" @disabled($editingId !== null || $form->module === '')>
+                <option value="">{{ __('Select an action') }}</option>
+                @foreach (\Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalog::actionsFor($form->module) as $action)
+                <option value="{{ $action }}">{{ \Src\IdentityAccess\Permission\Presentation\Support\PermissionLabelFormatter::actionLabel($action) }}</option>
+                @endforeach
+            </select>
             @error('form.action') <span class="form-error">{{ $message }}</span> @enderror
+        </div>
+
+        <div class="form-field">
+            <label for="permName">{{ __('Name') }}</label>
+            <input type="text" id="permName" value="{{ $form->module !== '' && $form->action !== '' ? "{$form->module}.{$form->action}" : '' }}" class="font-mono text-xs" readonly disabled>
         </div>
 
         <x-slot:footer>
