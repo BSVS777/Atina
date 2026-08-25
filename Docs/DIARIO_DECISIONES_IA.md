@@ -1730,3 +1730,101 @@ this batch).
   browser verification of the Permission screen (Módulo/Acción selects,
   dependent reset, read-only edit mode) is still recommended before
   considering this fully closed.
+
+---
+
+## 2026-08-25 — Fix: topbar profile role read from a non-existent scalar property
+
+### AI consultation
+
+The authenticated Superadmin (`prueba@gmail.com`, seeded by `DatabaseSeeder`)
+saw "Coordinadora Académica" in the profile dropdown instead of their real
+role. The task was a small, isolated bug fix: find the root cause and make
+the topbar show the user's actual persisted role via the existing
+`roles()` many-to-many relationship, without JWT/external-API work,
+without a new `role` column, and without re-enabling Module/Action editing
+in the Permission editor (that protection, from the prior 2026-08-25 entry,
+was to stay untouched).
+
+### Root cause
+
+`resources/views/components/siga/topbar.blade.php` read
+`auth()->user()->role ?? __('Academic Coordinator')`. `User` has no `role`
+scalar property — roles live in `HasRolesAndPermissions::roles()`
+(`belongsToMany(Role::class, 'role_user')`) — so the expression always
+evaluated to `null`, and every user, regardless of their real role, fell
+through to the hardcoded `__('Academic Coordinator')` label.
+
+### Accepted
+
+- **`User::roleLabel(): string`** (`app/Models/User.php`), alongside the
+  existing `initials()`/`avatarUrl()` display helpers: reads
+  `$this->roles->pluck('name')`, joins them with `, ` when non-empty, and
+  falls back to `__('No role assigned')` (`"Sin rol asignado"`) when the
+  user has no assigned role. Role names are already the real, seeded
+  Spanish strings (`Superadmin`, `Administrador`, `Coordinadora de
+  Docencia`, ...) — no translation layer needed, they're persisted data,
+  not UI copy.
+- **No priority/ordering column exists on `roles`** (verified: the
+  migration only has `id`, `name`, `description`, `timestamps`). Since the
+  project doesn't already define a role-priority order, and every seeded
+  demo user (`DatabaseSeeder`) has exactly one role, a concise joined list
+  was chosen over inventing a priority scheme with no real requirement
+  behind it — the simplest strategy that satisfies "if the project
+  already defines priority, use it; otherwise display role names in a
+  concise form."
+- Topbar now calls `auth()->user()->roleLabel()`.
+- Removed the now-dead `"Academic Coordinator": "Coordinadora Académica"`
+  entry from `lang/es.json` (its only use was the fallback just removed)
+  and added `"No role assigned": "Sin rol asignado"`.
+
+### Rejected
+
+- **A new `role` column on `users`** — explicitly out of scope; would
+  duplicate the RBAC model the `roles()` relationship already provides.
+- **Hardcoding role labels by email** — the brief explicitly forbids this;
+  `roleLabel()` reads only from the persisted relationship.
+- **A fabricated role-priority ranking** (e.g. treating `Superadmin` >
+  `Administrador` > ... by an arbitrary array) — nothing in the schema or
+  seeders defines this today, and inventing one would be a guess dressed
+  up as a rule. Left as a joined list; revisit only if the project
+  actually introduces multi-role users with a defined precedence.
+- **Adding a priority column to `roles` ourselves** — no requirement asked
+  for it, and it would be a schema change far outside a "small bug fix."
+
+### Learning
+
+- The topbar's own comment block already documents a similar past bug
+  class (client-side Alpine `sections[currentSection]` map going stale
+  across `wire:navigate`) — this is a second instance of the same root
+  shape: a piece of UI state that looks server-rendered but was actually
+  silently wrong for every user, masked by a plausible-looking fallback
+  string instead of an error.
+
+### Verification
+
+- New test: `tests/Feature/IdentityAccess/TopbarRoleDisplayTest.php` (5) —
+  Superadmin shows "Superadmin", Administrador shows "Administrador",
+  Coordinadora de Docencia shows its real persisted name, an unassigned
+  user shows `__('No role assigned')` and never "Academic Coordinator" /
+  "Coordinadora Académica", and a static assertion that the blade file no
+  longer contains the old `->role ??` fallback pattern.
+- `php artisan test` — 157/157 passing (up from 152).
+- `./vendor/bin/phpstan analyse --memory-limit=1G` — 0 errors.
+- `./vendor/bin/pint --test` — fails only on files this change never
+  touched (pre-existing, repo-wide drift, same as the prior entry);
+  `app/Models/User.php` itself was run through `pint` and passes clean.
+- `npm run typecheck` — 0 errors. `npm run build` — succeeds.
+- Browser verification: the Claude Chrome extension was not connected
+  (same recurring limitation as the two prior entries), so real-browser
+  E2E was not possible. As a substitute, scripted an HTTP session in
+  PowerShell — fetched the CSRF token from `/login`, posted Fortify
+  credentials for `prueba@gmail.com` / `12345678`, then requested
+  `/dashboard` — and confirmed the rendered HTML's
+  `<div class="profile-role">` contains exactly "Superadmin". Also
+  confirmed `/permissions` still returns 200 for that session, and that
+  `permission-component.blade.php`'s Módulo/Acción `<select>`s are
+  untouched (`@disabled($editingId !== null)` still present) — the
+  protection from the prior entry was not affected by this change. A real
+  browser check of the profile dropdown is still recommended before
+  considering this fully closed.

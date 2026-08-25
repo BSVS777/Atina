@@ -64,7 +64,7 @@
             <div class="profile-menu" :class="{ 'open': profileOpen }">
                 <div class="profile-head">
                     <div class="profile-name">{{ auth()->user()->name }}</div>
-                    <div class="profile-role">{{ auth()->user()->role ?? __('Academic Coordinator') }}</div>
+                    <div class="profile-role">{{ auth()->user()->roleLabel() }}</div>
                 </div>
                 <div class="profile-items">
                     <a href="#" class="profile-item block">{{ __('My profile') }}</a>

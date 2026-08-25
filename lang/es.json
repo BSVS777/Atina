@@ -1,6 +1,5 @@
 {
   "ACADEMIC": "ACADÉMICO",
-  "Academic Coordinator": "Coordinadora Académica",
   "Academic Management": "Gestión académica",
   "Academic Offer": "Oferta académica",
   "Academic credential created.": "Atestado académico creado.",
@@ -117,6 +116,7 @@
   "No permissions available": "No hay permisos disponibles",
   "No records found": "No se encontraron registros",
   "No results": "Sin resultados",
+  "No role assigned": "Sin rol asignado",
   "No specialties available": "No hay especialidades disponibles",
   "Nota técnica": "Nota técnica",
   "Notifications": "Notificaciones",
