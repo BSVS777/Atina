@@ -19,6 +19,7 @@
   "Affinity catalog version published.": "Versión del catálogo de atinencias publicada.",
   "Affinity catalog version updated.": "Versión del catálogo de atinencias actualizada.",
   "Affinity result": "Resultado de atinencia",
+  "All official permissions are already registered.": "Todos los permisos oficiales ya están registrados.",
   "All rights reserved.": "Todos los derechos reservados.",
   "An Administrator must ratify this assignment before the deadline.": "Un Administrador debe ratificar esta asignación antes de la fecha límite.",
   "Approve": "Aprobar",
@@ -198,6 +199,7 @@
   "Technical note registered — ratification pending.": "Nota técnica registrada — ratificación pendiente.",
   "Technical note rejected.": "Nota técnica rechazada.",
   "Term II": "Cuatrimestre II",
+  "The permission :module.:action is already registered.": "El permiso :module.:action ya está registrado.",
   "The permission has been deleted.": "El permiso ha sido eliminado.",
   "The record has been deleted.": "El registro ha sido eliminado.",
   "The role has been deleted.": "El rol ha sido eliminado.",
@@ -234,5 +236,6 @@
   "provisional": "provisional",
   "v:number": "v:number",
   "v:number — :agreement / Gazette :gazette:provisional": "v:number — :agreement / Gaceta :gazette:provisional",
-  ":career · :code — :name": ":career · :code — :name"
+  ":career · :code — :name": ":career · :code — :name",
+  ":registered of :total official permissions registered": ":registered de :total permisos oficiales registrados"
 }

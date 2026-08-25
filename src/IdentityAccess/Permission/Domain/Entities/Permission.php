@@ -61,6 +61,17 @@ final class Permission
         }
     }
 
+    /**
+     * Official permissions are authorization contracts referenced by
+     * Policies and RoleSeeder — deleting one can silently break access
+     * checks until it is recreated. A pre-existing/legacy row outside
+     * the catalog is not protected, mirroring Role::isProtected().
+     */
+    public function isProtected(): bool
+    {
+        return PermissionCatalog::isOfficial($this->module, $this->action);
+    }
+
     public function id(): ?int
     {
         return $this->id;

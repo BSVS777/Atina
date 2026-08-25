@@ -1828,3 +1828,203 @@ through to the hardcoded `__('Academic Coordinator')` label.
   protection from the prior entry was not affected by this change. A real
   browser check of the profile dropdown is still recommended before
   considering this fully closed.
+
+---
+
+## 2026-08-25 — RBAC Permission Catalog: missing-only creation + protect official permissions from deletion
+
+### AI consultation
+
+The prior two entries closed the Permission Catalog hardening (closed
+vocabulary, protected rename) and the topbar role-display fix, but the
+Create Permission modal still let a user select a (module, action)
+combination that already existed — submission just failed with a generic,
+misleading `unique` message (`"El valor del campo action ya ha sido
+registrado."`, which reads as if the bare action name were duplicated).
+Separately, nothing stopped deleting one of the 30 official permissions
+through the UI, even though those names are referenced by Policies and
+`RoleSeeder` — a temporary authorization break until manually recreated.
+Asked to close both gaps: missing-only creation (hide/disable Create when
+the catalog is complete; offer only unregistered module/action
+combinations otherwise) and protect official permissions from deletion,
+without touching JWT/external-API work or the Academic module.
+
+### Accepted
+
+- **`PermissionCatalogStatus`** (new Domain value object,
+  `Domain/ValueObjects/`) — pure computation of "what's missing" from an
+  already-fetched list of registered (module, action) pairs against
+  `PermissionCatalog::all()`. Exposes `isComplete()`, `registeredCount()`,
+  `totalOfficialCount()`, `availableModules()`, `availableActionsFor()`.
+  Kept as a second, separate value object rather than adding this
+  responsibility onto `PermissionCatalog` itself — `PermissionCatalog` is
+  the static, hardcoded vocabulary; `PermissionCatalogStatus` is a
+  request-scoped read model over live registration state. Conflating them
+  would make the pure, dependency-free catalog carry a runtime concern.
+- **`GetPermissionCatalogStatusUseCase`** (new Application use case) —
+  the one place that fetches `PermissionRepositoryInterface::all()` and
+  hands it to `PermissionCatalogStatus::fromRegistered()`. Follows the
+  existing one-use-case-per-operation convention in this bounded context.
+- **`PermissionComponent::catalogStatus()`** resolves the use case via
+  `app()` and is deliberately **not cached** on the component instance.
+  Caught this during implementation: `save()`/`delete()` call
+  `catalogStatus()` once during `$this->form->validate()` (pre-mutation)
+  and once again during the final `render()` of that same request — a
+  cached value would silently serve pre-mutation counts back in the
+  response for the very request that just changed them. The catalog is a
+  ~30-row table, so recomputing per call is negligible; correctness won over
+  micro-optimizing an uncached query.
+- **Create button**: hidden (not disabled) via
+  `data-table`'s existing `can-create` prop —
+  `Auth::user()->can('create', ...) && ! $catalogStatus->isComplete()`.
+  `openCreateModal()` also re-checks `isComplete()` server-side (dispatches
+  a danger toast and refuses to open) as defense-in-depth against a forged
+  `wire:click`.
+- **Status line**: a small muted `":registered de :total permisos
+  oficiales registrados"` paragraph above the table (not inside the
+  shared `<x-ui.data-table>` slot — that slot is a CSS-grid row template;
+  a stray `<p>` inside it would have broken the table-inner grid layout).
+- **Missing-only Module/Action selects**: `PermissionForm::rules()` now
+  restricts `Rule::in()` to `$catalogStatus->availableModules()` /
+  `availableActionsFor($module)` while creating (unchanged, full-catalog
+  behavior preserved for the edit path, where module/action stay
+  read-only regardless). `updatedModule()` clears a now-invalid `action`
+  using the same missing-only set.
+- **Rule order inside `action`'s rule array matters** — verified
+  empirically via `tinker` before assuming Laravel's validator: placing
+  `Rule::unique()` **before** `Rule::in()` was required, because when
+  `Rule::in()` (an object-based rule) fails first, Laravel's `Validator`
+  does not record `Unique`'s failure at all in `$validator->failed()`
+  (confirmed by direct experiment: swapping the two rules' order changed
+  which one(s) appeared in `failed()`). Reordering means a genuine
+  duplicate always surfaces the clearer, permission-level message first,
+  while the missing-only restriction still independently rejects the
+  submission either way.
+- **Improved duplicate message**: `PermissionForm::messages()` overrides
+  `action.unique` with `"El permiso :module.:action ya está registrado."`
+  — reachable directly (edit-mode forgery, where `Rule::in()` isn't
+  applied) and indirectly (create-mode, now that it's ordered first).
+- **`Permission::isProtected()`** (Domain entity) — `PermissionCatalog::
+  isOfficial($this->module, $this->action)`, mirroring `Role::
+  isProtected()`'s exact shape and reasoning. A pre-existing/legacy row
+  outside the catalog is not protected — preserves the same "don't invent
+  custom-permission functionality that doesn't exist" stance as the prior
+  entries.
+- **`DeletePermissionUseCase`** now throws a new
+  `PermissionIsProtectedException::forDeletion()` when the found
+  permission `isProtected()`, mirroring `DeleteRoleUseCase`'s existing
+  guard for `Role::isProtected()` exactly — same exception class, an
+  added factory method (distinct wording from the existing rename-guard
+  message). `PermissionComponent::delete()` catches it the same way
+  `save()` already catches `InvalidPermissionException`/
+  `PermissionIsProtectedException` — dispatches a danger toast, does not
+  rethrow — matching `RoleComponent::delete()`'s established convention
+  for the identical scenario.
+- **UI hiding**: `toRow()` now exposes `'protected' => $permission-
+  >isProtected()`; the Blade view passes `delete-visible="!row.protected"`
+  (client mode, matching `role-component.blade.php`'s exact precedent)
+  and `&& ! $permission->isProtected()` on server mode's `can-delete`.
+  Domain guard (use case) + UI hiding, not UI-only, per the brief.
+- **Edit/detail behavior left untouched** — Module/Action/Name were
+  already always read-only in edit mode for *every* existing permission
+  (official or not, since the prior "protected identity" entry), so there
+  was no separate "official vs. custom edit" distinction to add; changing
+  the edit action's icon/semantics for a purely cosmetic reason was
+  judged not worth the extra surface for this pass.
+- Local dev DB note: while empirically verifying the rule-order finding
+  above with `tinker` against the real `gestion_academica_utn` database,
+  a debug `firstOrCreate`+`delete()` round-trip accidentally deleted the
+  already-seeded `roles.edit` permission row. Caught immediately via a
+  fresh official/persisted/missing/unexpected count check (30/30/0/0
+  expected, got 29 persisted), restored via `firstOrCreate` (same name,
+  module, action), and re-verified 30/30/0/0. No role had `roles.edit`
+  attached in this database, so no pivot data was lost — but the restored
+  row's primary key differs from the original (harmless, since nothing in
+  this codebase references permissions by id, only by name).
+
+### Rejected
+
+- **Disabling instead of hiding the Create button** — hiding is cleaner
+  per the brief's explicit preference and the catalog-complete state
+  genuinely offers nothing to do.
+- **A visually dominant completeness banner** — kept it a small muted
+  line consistent with the existing design system, per the brief.
+- **Caching `catalogStatus()` per-request** — see Accepted above; the
+  staleness risk it introduced outweighed the negligible query savings.
+- **A badge column ("Custom"/"System") for permissions**, mirroring
+  `RoleComponent`'s Type column — not requested, and every currently
+  visible permission is already official (there is no custom-permission
+  authoring path), so the column would always read "System" and add
+  nothing. `Role`'s equivalent column earns its place because custom
+  roles genuinely exist; permissions don't have that today.
+- **Redesigning the Edit action's icon/semantics** for official
+  permissions — the brief allowed this as one option but called it
+  optional; left untouched as the smallest-change choice (see Accepted).
+
+### Learning
+
+- When a Livewire component method is called both as a validation
+  precondition *and* again during that same request's final `render()`,
+  memoizing it on the instance is a correctness bug waiting to surface —
+  the two calls straddle a mutation, not just consecutive reads. Verified
+  this by tracing the actual `save()`/`delete()` call order rather than
+  trusting the "cache read-heavy things" instinct by default.
+- Laravel's `Validator::failed()` does not always list every rule that
+  failed for an attribute — the order rules are declared in the array can
+  determine which failures get recorded. Confirmed by direct experiment
+  (`tinker`, not just reading Laravel source) before writing the fix or
+  the test that depends on it.
+
+### Verification
+
+- New test: `tests/Unit/IdentityAccess/PermissionCatalogStatusTest.php`
+  (3) — complete catalog (`isComplete()` true, counts 30/30, empty
+  `availableModules()`), one missing combination (`isComplete()` false,
+  29/30, only the affected module offered, only its missing action
+  offered, a fully-registered module never offered), unknown/null module
+  returns an empty action list.
+- Extended `tests/Feature/IdentityAccess/PermissionManagementTest.php`
+  (+7): Create unavailable + forged `openCreateModal()` refused when the
+  catalog is complete (30/30); Create available with missing-only
+  module/action filtering when one permission (`roles.export_excel`) is
+  deleted, and completeness is restored (and Create hides again) after
+  creating it; a forged create request for an already-registered
+  combination (`roles.edit`) is rejected; a duplicate forged during edit
+  (module/action changed to collide with another existing permission)
+  shows the exact improved message and leaves the original row untouched;
+  an official permission (`atinencia.verificar`) cannot be deleted via the
+  component and stays in the database; deleting a protected permission
+  does not detach it from a role that has it assigned
+  (`Administrador`/`atinencia.verificar`); a legacy permission outside the
+  catalog can still be deleted normally (preserves the pre-existing
+  legacy-row support).
+- `php artisan test` — 167/167 passing (up from 157).
+- `./vendor/bin/phpstan analyse --memory-limit=1G` — 0 errors (one
+  `missingType.iterableValue` on `PermissionForm::messages()`'s return
+  type was fixed with a `@return array<string, string>` docblock).
+- `./vendor/bin/pint --test` — fails only on files this change never
+  touched; confirmed by temporarily swapping `PermissionComponent.php`
+  back to its pre-change (`HEAD`) content and re-running Pint on just that
+  file — the same 3 fixers (`concat_space`, `unary_operator_spaces`,
+  `not_operator_with_successor_space`) failed identically, confirming
+  they predate this change (consistent with the identical finding on this
+  same file in the prior Permission-catalog entry).
+- `npm run typecheck` — 0 errors. `npm run build` — succeeds.
+- Read-only query against the real `gestion_academica_utn` MySQL
+  database (after the accidental-delete/restore noted above): 30
+  official, 30 persisted, 0 missing, 0 unexpected.
+- Browser verification: the Claude Chrome extension was not connected
+  (same recurring limitation as the prior two entries). As a substitute,
+  scripted an authenticated HTTP session in PowerShell (`prueba@gmail.com`
+  / `12345678`, a Superadmin confirmed via `tinker` to hold
+  `permissions.create`) and fetched `/permissions`. Confirmed in the
+  rendered HTML: the status line reads exactly "30 de 30 permisos
+  oficiales registrados"; the `openCreateModal()` Alpine call is entirely
+  absent from the markup (Create is hidden, not merely disabled, and not
+  hidden for lack of authorization); the client-mode delete icon carries
+  `x-show="!row.protected"`; no exception/error markers in the response;
+  search input, sortable headers, and pagination controls render
+  unchanged (their Alpine logic was not touched by this change). Genuine
+  browser interaction (clicking Create, watching the modal's live
+  missing-only selects, checking the console) is still recommended before
+  considering this fully closed.

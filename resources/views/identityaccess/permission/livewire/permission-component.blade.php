@@ -12,6 +12,13 @@
         this.confirmDelete.open = false;
     },
 }">
+    <p class="text-xs" style="color:var(--textMuted); margin: 0 0 8px;">
+        {{ __(':registered of :total official permissions registered', [
+            'registered' => $catalogStatus->registeredCount(),
+            'total' => $catalogStatus->totalOfficialCount(),
+        ]) }}
+    </p>
+
     <x-ui.data-table
         :headers="[
                 ['key' => 'module', 'label' => __('Module'), 'sortable' => true],
@@ -26,7 +33,7 @@
         :sort-dir="$sortDir"
         :per-page="$perPage"
         table-cols="1fr 1.3fr 1.6fr 1fr"
-        :can-create="Auth::user()->can('create', \Src\IdentityAccess\Permission\Domain\Entities\Permission::class)"
+        :can-create="Auth::user()->can('create', \Src\IdentityAccess\Permission\Domain\Entities\Permission::class) && ! $catalogStatus->isComplete()"
         :can-search="Auth::user()->can('search', \Src\IdentityAccess\Permission\Domain\Entities\Permission::class)"
         :can-export-pdf="Auth::user()->can('exportPdf', \Src\IdentityAccess\Permission\Domain\Entities\Permission::class)"
         :can-export-excel="Auth::user()->can('exportExcel', \Src\IdentityAccess\Permission\Domain\Entities\Permission::class)"
@@ -43,6 +50,7 @@
                         :can-edit="Auth::user()->hasPermissionTo('permissions.edit')"
                         :can-delete="Auth::user()->hasPermissionTo('permissions.delete')"
                         edit-action="$wire.openEditModal(row.id)"
+                        delete-visible="!row.protected"
                         delete-id="row.id" />
                 </div>
             </div>
@@ -57,7 +65,7 @@
             <div class="actions-cell">
                 <x-ui.row-actions
                     :can-edit="Auth::user()->can('update', $permission)"
-                    :can-delete="Auth::user()->can('delete', $permission)"
+                    :can-delete="Auth::user()->can('delete', $permission) && ! $permission->isProtected()"
                     edit-action="$wire.openEditModal({{ $permission->id() }})"
                     delete-id="{{ $permission->id() }}" />
             </div>
@@ -73,7 +81,7 @@
             <label for="permModule">{{ __('Module') }}</label>
             <select id="permModule" wire:model.live="form.module" class="{{ $errors->has('form.module') ? 'has-error' : '' }}" @disabled($editingId !== null)>
                 <option value="">{{ __('Select a module') }}</option>
-                @foreach (\Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalog::modules() as $module)
+                @foreach (($editingId === null ? $catalogStatus->availableModules() : \Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalog::modules()) as $module)
                 <option value="{{ $module }}">{{ \Src\IdentityAccess\Permission\Presentation\Support\PermissionLabelFormatter::moduleLabel($module) }}</option>
                 @endforeach
             </select>
@@ -84,7 +92,7 @@
             <label for="permAction">{{ __('Action') }}</label>
             <select id="permAction" wire:model="form.action" class="{{ $errors->has('form.action') ? 'has-error' : '' }}" @disabled($editingId !== null || $form->module === '')>
                 <option value="">{{ __('Select an action') }}</option>
-                @foreach (\Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalog::actionsFor($form->module) as $action)
+                @foreach (($editingId === null ? $catalogStatus->availableActionsFor($form->module) : \Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalog::actionsFor($form->module)) as $action)
                 <option value="{{ $action }}">{{ \Src\IdentityAccess\Permission\Presentation\Support\PermissionLabelFormatter::actionLabel($action) }}</option>
                 @endforeach
             </select>

@@ -32,24 +32,57 @@ class PermissionForm extends Form
         // saveable as a no-op, not rejected here.
         $isCreating = $component->editingId === null;
 
+        // Restricted to what's actually missing, not the whole catalog —
+        // the modal must never offer a combination that already exists
+        // (see PermissionCatalogStatus). This also doubles as backend
+        // protection against a forged request re-selecting an existing
+        // combination the UI never offered.
+        $status = $isCreating ? $component->catalogStatus() : null;
+
         return [
             'module' => [
                 'required',
                 'string',
                 'max:255',
-                ...($isCreating ? [Rule::in(PermissionCatalog::modules())] : []),
+                ...($isCreating ? [Rule::in($status->availableModules())] : []),
             ],
             'action' => [
                 'required',
                 'string',
                 'max:255',
-                ...($isCreating ? [Rule::in(PermissionCatalog::actionsFor($this->module))] : []),
-                // Uniqueness is on the (module, action) pair, not on
-                // "action" alone — the extra where() scopes it correctly.
+                // Checked before Rule::in(): Laravel's Validator stops
+                // recording further rule failures for an attribute once
+                // an object-based rule like In() fails, which would
+                // otherwise bury this clearer message behind In()'s
+                // generic "invalid selection" one. Uniqueness is on the
+                // (module, action) pair, not on "action" alone — the
+                // extra where() scopes it correctly. Also the last line
+                // of defense if Rule::in() is ever bypassed (e.g. a
+                // stale request racing another creation of the same
+                // combination).
                 Rule::unique('permissions', 'action')
                     ->where(fn ($query) => $query->where('module', $this->module))
                     ->ignore($component->editingId),
+                ...($isCreating ? [Rule::in($status->availableActionsFor($this->module))] : []),
             ],
+        ];
+    }
+
+    /**
+     * "El valor del campo action ya ha sido registrado." (the framework's
+     * generic `unique` message) reads as if the *action name alone* were
+     * duplicated, not the (module, action) pair — misleading given
+     * actions like "gestionar" are legitimately shared across modules.
+     *
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'action.unique' => __('The permission :module.:action is already registered.', [
+                'module' => $this->module,
+                'action' => $this->action,
+            ]),
         ];
     }
 
@@ -62,7 +95,14 @@ class PermissionForm extends Form
      */
     public function updatedModule(): void
     {
-        if (! PermissionCatalog::isOfficial($this->module, $this->action)) {
+        /** @var PermissionComponent $component */
+        $component = $this->component;
+
+        $validActions = $component->editingId === null
+            ? $component->catalogStatus()->availableActionsFor($this->module)
+            : PermissionCatalog::actionsFor($this->module);
+
+        if (! in_array($this->action, $validActions, true)) {
             $this->action = '';
         }
     }

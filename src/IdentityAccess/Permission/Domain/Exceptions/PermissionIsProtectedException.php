@@ -18,4 +18,9 @@ final class PermissionIsProtectedException extends DomainException
     {
         return new self("The permission [{$name}] is protected by the system and its module/action cannot be changed.");
     }
+
+    public static function forDeletion(string $name): self
+    {
+        return new self("The permission [{$name}] is protected by the system and cannot be deleted.");
+    }
 }

@@ -3,6 +3,7 @@
 namespace Tests\Feature\IdentityAccess;
 
 use App\Models\Permission;
+use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
@@ -173,6 +174,141 @@ class PermissionManagementTest extends TestCase
         foreach (['atinencia.verificar', 'catalogo.gestionar', 'nota_tecnica.aprobar'] as $officialPermission) {
             $this->assertTrue($admin->hasPermissionTo($officialPermission));
         }
+    }
+
+    public function test_create_is_unavailable_when_the_catalog_is_complete(): void
+    {
+        $this->seed(PermissionSeeder::class);
+        $this->actingAs($this->userWithPermissionManagementPermissions());
+
+        $component = Livewire::test(PermissionComponent::class);
+
+        $status = $component->instance()->catalogStatus();
+        $this->assertTrue($status->isComplete());
+        $this->assertSame(30, $status->registeredCount());
+        $this->assertSame(30, $status->totalOfficialCount());
+        $component->assertDontSee('$wire.openCreateModal()', false);
+
+        // Defense in depth: a forged wire:click still refuses to open
+        // the (now pointless) creation modal.
+        $component->call('openCreateModal')
+            ->assertSet('showModal', false)
+            ->assertDispatched('toast', variant: 'danger');
+    }
+
+    public function test_create_becomes_available_when_a_permission_is_missing_and_completeness_is_restored_on_creation(): void
+    {
+        $this->seed(PermissionSeeder::class);
+        Permission::query()->where(['module' => 'roles', 'action' => 'export_excel'])->delete();
+        $this->actingAs($this->userWithPermissionManagementPermissions());
+
+        $component = Livewire::test(PermissionComponent::class);
+
+        $status = $component->instance()->catalogStatus();
+        $this->assertFalse($status->isComplete());
+        $this->assertSame(29, $status->registeredCount());
+        // Only the module with a missing action is offered.
+        $this->assertSame(['roles'], $status->availableModules());
+        // Only the missing action is offered for that module.
+        $this->assertSame(['export_excel'], $status->availableActionsFor('roles'));
+        $component->assertSee('$wire.openCreateModal()', false);
+
+        $component->call('openCreateModal')
+            ->assertSet('showModal', true)
+            ->set('form.module', 'roles')
+            ->set('form.action', 'export_excel')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('permissions', ['module' => 'roles', 'action' => 'export_excel', 'name' => 'roles.export_excel']);
+
+        $refreshed = Livewire::test(PermissionComponent::class);
+        $this->assertTrue($refreshed->instance()->catalogStatus()->isComplete());
+        $refreshed->assertDontSee('$wire.openCreateModal()', false);
+    }
+
+    public function test_a_forged_create_request_for_an_already_registered_permission_is_rejected(): void
+    {
+        $this->seed(PermissionSeeder::class);
+        $this->actingAs($this->userWithPermissionManagementPermissions());
+
+        // The Module/Action selects would never offer "roles"/"edit"
+        // (already registered) — this simulates a forged request that
+        // sets the Livewire property directly, bypassing the UI.
+        Livewire::test(PermissionComponent::class)
+            ->set('form.module', 'roles')
+            ->set('form.action', 'edit')
+            ->call('save')
+            ->assertHasErrors(['form.action']);
+
+        $this->assertDatabaseCount('permissions', 30);
+    }
+
+    public function test_a_duplicate_combination_forged_during_edit_returns_a_clear_permission_level_message(): void
+    {
+        $this->seed(PermissionSeeder::class);
+        $this->actingAs($this->userWithPermissionManagementPermissions());
+
+        // Module/Action are read-only in edit mode, so Rule::in() isn't
+        // applied there — this exercises the unique-rule fallback alone
+        // (see PermissionForm::rules()) by forging a collision with
+        // another already-registered permission.
+        $target = Permission::query()->where(['module' => 'roles', 'action' => 'delete'])->firstOrFail();
+
+        Livewire::test(PermissionComponent::class)
+            ->call('openEditModal', $target->id)
+            ->set('form.module', 'roles')
+            ->set('form.action', 'edit')
+            ->call('save')
+            ->assertHasErrors(['form.action' => 'unique'])
+            ->assertSee(__('The permission :module.:action is already registered.', ['module' => 'roles', 'action' => 'edit']));
+
+        $this->assertDatabaseHas('permissions', ['id' => $target->id, 'module' => 'roles', 'action' => 'delete']);
+    }
+
+    public function test_an_official_permission_cannot_be_deleted(): void
+    {
+        $this->seed(PermissionSeeder::class);
+        $this->actingAs($this->userWithPermissionManagementPermissions());
+
+        $target = Permission::query()->where(['module' => 'atinencia', 'action' => 'verificar'])->firstOrFail();
+
+        Livewire::test(PermissionComponent::class)
+            ->call('delete', $target->id)
+            ->assertDispatched('toast', variant: 'danger');
+
+        $this->assertDatabaseHas('permissions', ['id' => $target->id]);
+    }
+
+    public function test_deleting_a_protected_permission_does_not_remove_role_assignments(): void
+    {
+        $this->seed([PermissionSeeder::class, RoleSeeder::class]);
+        $this->actingAs($this->userWithPermissionManagementPermissions());
+
+        $role = Role::query()->where('name', 'Administrador')->firstOrFail();
+        $target = Permission::query()->where(['module' => 'atinencia', 'action' => 'verificar'])->firstOrFail();
+        $this->assertTrue($role->permissions()->whereKey($target->id)->exists());
+
+        Livewire::test(PermissionComponent::class)->call('delete', $target->id);
+
+        $this->assertTrue($role->permissions()->whereKey($target->id)->exists());
+    }
+
+    public function test_a_legacy_permission_outside_the_catalog_can_still_be_deleted(): void
+    {
+        $this->actingAs($this->userWithPermissionManagementPermissions());
+
+        $legacy = Permission::query()->create([
+            'module' => 'legacy_module',
+            'action' => 'legacy_action',
+            'name' => 'legacy_module.legacy_action',
+        ]);
+
+        Livewire::test(PermissionComponent::class)
+            ->call('delete', $legacy->id)
+            ->assertDispatched('toast', variant: 'success');
+
+        $this->assertDatabaseMissing('permissions', ['id' => $legacy->id]);
     }
 
     private function userWithPermissionManagementPermissions(): User

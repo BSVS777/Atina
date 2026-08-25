@@ -15,11 +15,13 @@ use Livewire\Component;
 use Src\IdentityAccess\Permission\Application\UseCases\CreatePermissionUseCase;
 use Src\IdentityAccess\Permission\Application\UseCases\DeletePermissionUseCase;
 use Src\IdentityAccess\Permission\Application\UseCases\FindPermissionUseCase;
+use Src\IdentityAccess\Permission\Application\UseCases\GetPermissionCatalogStatusUseCase;
 use Src\IdentityAccess\Permission\Application\UseCases\ListPermissionsUseCase;
 use Src\IdentityAccess\Permission\Application\UseCases\UpdatePermissionUseCase;
 use Src\IdentityAccess\Permission\Domain\Entities\Permission;
 use Src\IdentityAccess\Permission\Domain\Exceptions\InvalidPermissionException;
 use Src\IdentityAccess\Permission\Domain\Exceptions\PermissionIsProtectedException;
+use Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalogStatus;
 use Src\IdentityAccess\Permission\Presentation\Livewire\Forms\PermissionForm;
 use Src\Shared\Export\Contracts\ExcelExporterInterface;
 use Src\Shared\Export\Contracts\PdfExporterInterface;
@@ -49,9 +51,32 @@ class PermissionComponent extends Component
         $this->sortKey = 'module';
     }
 
+    /**
+     * How much of PermissionCatalog is already registered — drives the
+     * Create button's availability and the modal's missing-only selects.
+     * Called from render(), openCreateModal(), and PermissionForm
+     * (module/action rules + updatedModule()). Deliberately uncached: a
+     * save()/delete() request calls this both before and after mutating
+     * the table (validate() then render()) — caching would serve the
+     * pre-mutation count back in that same response. The catalog is a
+     * handful of rows, so recomputing per call is negligible.
+     */
+    public function catalogStatus(): PermissionCatalogStatus
+    {
+        return app(GetPermissionCatalogStatusUseCase::class)->handle();
+    }
+
     public function openCreateModal(): void
     {
         $this->authorize('create', Permission::class);
+
+        if ($this->catalogStatus()->isComplete()) {
+            // The Create button is hidden once the catalog is complete;
+            // this only guards a forged/direct wire:click call.
+            $this->dispatch('toast', variant: 'danger', text: __('All official permissions are already registered.'));
+
+            return;
+        }
 
         $this->editingId = null;
         $this->form->reset();
@@ -110,7 +135,13 @@ class PermissionComponent extends Component
         // requires an actual Permission instance, not the class string.
         $this->authorize('delete', $findUseCase->handle($id));
 
-        $useCase->handle($id);
+        try {
+            $useCase->handle($id);
+        } catch (PermissionIsProtectedException $e) {
+            $this->dispatch('toast', variant: 'danger', text: $e->getMessage());
+
+            return;
+        }
 
         $this->refreshTable($this->freshRows($listUseCase));
         $this->dispatch('toast', variant: 'success', text: __('Permission deleted.'));
@@ -147,6 +178,8 @@ class PermissionComponent extends Component
         $view = $this->isServerMode()
             ? $this->renderServerMode($useCase)
             : $this->renderClientMode($useCase);
+
+        $view = $view->with('catalogStatus', $this->catalogStatus());
 
         /** @disregard P1013 Livewire registra ->layout() como macro en runtime sobre Illuminate\View\View */
         return $view->layout('components.layouts.dashboard', [
@@ -197,6 +230,7 @@ class PermissionComponent extends Component
             'module' => $permission->module(),
             'action' => $permission->action(),
             'name' => $permission->name(),
+            'protected' => $permission->isProtected(),
         ];
     }
 

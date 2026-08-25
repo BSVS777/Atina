@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Src\IdentityAccess\Permission\Application\UseCases;
 
 use Src\IdentityAccess\Permission\Domain\Contracts\PermissionRepositoryInterface;
+use Src\IdentityAccess\Permission\Domain\Exceptions\PermissionIsProtectedException;
 use Src\IdentityAccess\Permission\Domain\Exceptions\PermissionNotFoundException;
 
 final class DeletePermissionUseCase
@@ -15,8 +16,10 @@ final class DeletePermissionUseCase
 
     public function handle(int $id): void
     {
-        if (!$this->repository->find($id)) {
-            throw PermissionNotFoundException::withId($id);
+        $permission = $this->repository->find($id) ?? throw PermissionNotFoundException::withId($id);
+
+        if ($permission->isProtected()) {
+            throw PermissionIsProtectedException::forDeletion($permission->name());
         }
 
         $this->repository->delete($id);
