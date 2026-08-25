@@ -10,8 +10,10 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface;
+use Src\Academic\AcademicCredential\Domain\Contracts\InstitutionSearchServiceInterface;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 use Src\Academic\AcademicCredential\Infrastructure\Persistence\Repositories\EloquentAcademicCredentialRepository;
+use Src\Academic\AcademicCredential\Infrastructure\Services\OpenAlexInstitutionSearchService;
 use Src\Academic\AcademicCredential\Presentation\Policies\AcademicCredentialPolicy;
 use Src\Academic\AffinityCatalog\Domain\Contracts\AffinityCatalogVersionRepositoryInterface;
 use Src\Academic\AffinityCatalog\Domain\Entities\AffinityCatalogVersion;
@@ -86,6 +88,13 @@ final class DomainServiceProvider extends ServiceProvider
             secret: (string) config('jwt.secret'),
             ttlMinutes: (int) config('jwt.ttl'),
             issuer: (string) config('jwt.issuer'),
+        ));
+
+        $this->app->singleton(InstitutionSearchServiceInterface::class, fn (): OpenAlexInstitutionSearchService => new OpenAlexInstitutionSearchService(
+            baseUrl: (string) config('openalex.base_url'),
+            apiKey: filled(config('openalex.api_key')) ? (string) config('openalex.api_key') : null,
+            timeoutSeconds: (int) config('openalex.timeout'),
+            cacheTtlSeconds: (int) config('openalex.cache_ttl'),
         ));
     }
 

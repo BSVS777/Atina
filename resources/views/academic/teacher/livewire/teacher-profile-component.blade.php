@@ -120,10 +120,45 @@
             </select>
             @error('form.degreeLevel') <span class="form-error">{{ $message }}</span> @enderror
         </div>
-        <div class="form-field">
+        <div class="form-field" style="position: relative;">
             <label for="credentialInstitution">{{ __('Institution') }}</label>
-            <input type="text" id="credentialInstitution" wire:model="form.institution" class="{{ $errors->has('form.institution') ? 'has-error' : '' }}">
+            <input type="text" id="credentialInstitution" autocomplete="off"
+                wire:model.live.debounce.400ms="form.institution"
+                class="{{ $errors->has('form.institution') ? 'has-error' : '' }}">
             @error('form.institution') <span class="form-error">{{ $message }}</span> @enderror
+
+            <p style="margin: 0; font-size: 12.5px; color: var(--textSecondary);">
+                {{ __('Type at least 3 characters to search real institutions via OpenAlex, or type the name manually.') }}
+            </p>
+
+            <div wire:loading.delay wire:target="form.institution" style="font-size: 12.5px; color: var(--textSecondary);">
+                {{ __('Searching institutions…') }}
+            </div>
+
+            @if ($institutionSearchUnavailable)
+            <p style="margin: 0; font-size: 12.5px; color: var(--textSecondary);">
+                {{ __('Institution suggestions are unavailable right now. You can still type the institution manually.') }}
+            </p>
+            @endif
+
+            @if ($institutionSearchPerformed && empty($institutionSuggestions) && ! $institutionSearchUnavailable)
+            <p style="margin: 0; font-size: 12.5px; color: var(--textSecondary);" wire:loading.remove wire:target="form.institution">
+                {{ __('No matching institutions found. You can still type the institution manually.') }}
+            </p>
+            @endif
+
+            @if (! empty($institutionSuggestions))
+            <div class="institution-suggestions" wire:loading.remove wire:target="form.institution">
+                @foreach ($institutionSuggestions as $suggestion)
+                <button type="button" class="institution-suggestion-item" wire:click="selectInstitution(@js($suggestion['name']))">
+                    <span class="institution-suggestion-name">{{ $suggestion['name'] }}</span>
+                    @if ($suggestion['hint'])
+                    <span class="institution-suggestion-hint">{{ $suggestion['hint'] }}</span>
+                    @endif
+                </button>
+                @endforeach
+            </div>
+            @endif
         </div>
         <div class="form-field">
             <label for="credentialYearObtained">{{ __('Year obtained') }}</label>

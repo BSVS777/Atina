@@ -16,9 +16,12 @@ use Src\Academic\AcademicCredential\Application\UseCases\EditAcademicCredentialU
 use Src\Academic\AcademicCredential\Application\UseCases\FindAcademicCredentialUseCase;
 use Src\Academic\AcademicCredential\Application\UseCases\ListAcademicCredentialsForTeacherUseCase;
 use Src\Academic\AcademicCredential\Application\UseCases\RegisterAcademicCredentialUseCase;
+use Src\Academic\AcademicCredential\Application\UseCases\SearchAcademicInstitutionsUseCase;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 use Src\Academic\AcademicCredential\Domain\Exceptions\DuplicateCredentialException;
+use Src\Academic\AcademicCredential\Domain\Exceptions\InstitutionSearchUnavailableException;
+use Src\Academic\AcademicCredential\Domain\InstitutionSearchResult;
 use Src\Academic\AcademicCredential\Presentation\Livewire\Forms\AcademicCredentialForm;
 use Src\Academic\AffinityCatalog\Application\UseCases\ResolveApplicableCatalogVersionUseCase;
 
@@ -44,6 +47,13 @@ class TeacherProfileComponent extends Component
 
     public ?int $contextCourseId = null;
 
+    /** @var list<array{name: string, hint: ?string}> */
+    public array $institutionSuggestions = [];
+
+    public bool $institutionSearchUnavailable = false;
+
+    public bool $institutionSearchPerformed = false;
+
     public function mount(Teacher $teacher): void
     {
         $this->teacher = $teacher;
@@ -56,6 +66,7 @@ class TeacherProfileComponent extends Component
         $this->editingId = null;
         $this->form->reset();
         $this->resetValidation();
+        $this->resetInstitutionSearch();
         $this->showModal = true;
     }
 
@@ -67,12 +78,61 @@ class TeacherProfileComponent extends Component
         $this->editingId = $id;
         $this->form->fromEntity($credential);
         $this->resetValidation();
+        $this->resetInstitutionSearch();
         $this->showModal = true;
     }
 
     public function closeModal(): void
     {
         $this->showModal = false;
+    }
+
+    /**
+     * Enrichment only (Batch 5 / OpenAlex): assists filling in the
+     * existing Institution field, never a hard dependency for saving a
+     * credential. Failures are caught here — never bubbled to the user as
+     * a provider exception — so manual typing always keeps working.
+     */
+    public function updatedFormInstitution(string $value): void
+    {
+        $this->institutionSearchUnavailable = false;
+
+        if (mb_strlen(trim($value)) < SearchAcademicInstitutionsUseCase::MIN_QUERY_LENGTH) {
+            $this->institutionSuggestions = [];
+            $this->institutionSearchPerformed = false;
+
+            return;
+        }
+
+        try {
+            $results = app(SearchAcademicInstitutionsUseCase::class)
+                ->handle($value, (int) config('openalex.institution_limit'));
+        } catch (InstitutionSearchUnavailableException) {
+            $this->institutionSuggestions = [];
+            $this->institutionSearchPerformed = false;
+            $this->institutionSearchUnavailable = true;
+
+            return;
+        }
+
+        $this->institutionSearchPerformed = true;
+        $this->institutionSuggestions = array_map(
+            fn (InstitutionSearchResult $result): array => ['name' => $result->name, 'hint' => $result->hint],
+            $results,
+        );
+    }
+
+    public function selectInstitution(string $name): void
+    {
+        $this->form->institution = $name;
+        $this->resetInstitutionSearch();
+    }
+
+    private function resetInstitutionSearch(): void
+    {
+        $this->institutionSuggestions = [];
+        $this->institutionSearchUnavailable = false;
+        $this->institutionSearchPerformed = false;
     }
 
     public function save(RegisterAcademicCredentialUseCase $registerUseCase, EditAcademicCredentialUseCase $editUseCase): void

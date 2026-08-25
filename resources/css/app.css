@@ -1041,6 +1041,47 @@ select:focus[data-flux-control] {
     font-size: 12.5px;
     color: var(--logout);
   }
+  /* OpenAlex institution-suggestion dropdown (Institution field, academic
+     credential modal) — positioned like .download-menu, but anchored under
+     the field instead of a top-bar trigger. */
+  .institution-suggestions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    margin-top: 2px;
+    background: var(--cardBg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(10, 20, 40, 0.18);
+    overflow: hidden;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 20;
+  }
+  .institution-suggestion-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: 10px 14px;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    text-align: left;
+    font-family: inherit;
+  }
+  .institution-suggestion-item:hover {
+    background: var(--hoverBg, rgba(11, 60, 140, 0.06));
+  }
+  .institution-suggestion-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--textPrimary);
+  }
+  .institution-suggestion-hint {
+    font-size: 12px;
+    color: var(--textSecondary);
+  }
   /* Filter box that sits INSIDE a modal section but outside .form-field
      (no <label> of its own) -- e.g. the specialty search in the affinity
      catalog modal. Without this it inherits nothing and renders as a bare
