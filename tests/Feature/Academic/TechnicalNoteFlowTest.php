@@ -8,6 +8,7 @@ use App\Models\Course;
 use App\Models\CourseGroup;
 use App\Models\Specialty;
 use App\Models\Teacher;
+use App\Models\TechnicalNote as TechnicalNoteModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Src\Academic\AffinityCatalog\Application\DTOs\AffinityCatalogVersionDTO;
 use Src\Academic\AffinityCatalog\Application\UseCases\CreateAffinityCatalogVersionUseCase;
@@ -22,6 +23,8 @@ use Src\Academic\TeacherAssignment\Domain\Contracts\AffinityVerificationReposito
 use Src\Academic\TeacherAssignment\Domain\Contracts\TeacherAssignmentRepositoryInterface;
 use Src\Academic\TeacherAssignment\Domain\Contracts\UploadedDocument;
 use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidAssignmentTransitionException;
+use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidTechnicalNoteAttachmentException;
+use Src\Academic\TeacherAssignment\Domain\Exceptions\InvalidTechnicalNoteDeadlineException;
 use Src\Academic\TeacherAssignment\Domain\ProposalStatus;
 use Src\Academic\TeacherAssignment\Domain\VerificationResult;
 use Tests\TestCase;
@@ -29,6 +32,14 @@ use Tests\TestCase;
 /**
  * DO-02b. D12 is the rubric's explicit "Regular vs Excelente" case: a
  * Technical Note must never overwrite the original verification result.
+ *
+ * The `test_*_bypassing_presentation` methods below call
+ * `AttachTechnicalNoteUseCase` directly (as every method in this class
+ * already does — none of them go through `TeacherAssignmentComponent`)
+ * to prove the PDF/deadline invariants are enforced at the Application
+ * boundary itself, not only by `TechnicalNoteForm`'s Livewire rules
+ * (see `TechnicalNoteUploadTest` for the Presentation-level coverage of
+ * the same rules).
  */
 class TechnicalNoteFlowTest extends TestCase
 {
@@ -67,12 +78,12 @@ class TechnicalNoteFlowTest extends TestCase
         return [$result->assignment->id(), $result->verification];
     }
 
-    private function document(): UploadedDocument
+    private function document(string $mimeType = 'application/pdf'): UploadedDocument
     {
         return new UploadedDocument(
             storagePath: 'technical-notes/test.pdf',
             originalFileName: 'test.pdf',
-            mimeType: 'application/pdf',
+            mimeType: $mimeType,
             sizeBytes: 1024,
             hashSha256: hash('sha256', 'test'),
         );
@@ -170,11 +181,20 @@ class TechnicalNoteFlowTest extends TestCase
     {
         [$assignmentId] = $this->proposeNotMatched();
 
+        // The deadline must be valid (today-or-future) at creation time —
+        // DO-02b's invariant, enforced in AttachTechnicalNoteUseCase — so
+        // create it valid, then backdate the persisted row directly to
+        // simulate the deadline having since passed (the same way a
+        // real note ages past its deadline over time).
         $note = app(AttachTechnicalNoteUseCase::class)->handle(new AttachTechnicalNoteDTO(
             teacherAssignmentId: $assignmentId,
-            ratificationDeadline: now()->subDays(1)->toDateString(),
+            ratificationDeadline: now()->addDay()->toDateString(),
             document: $this->document(),
         ), null);
+
+        TechnicalNoteModel::query()->whereKey($note->id())->update([
+            'fecha_limite_ratificacion' => now()->subDay()->toDateString(),
+        ]);
 
         $expiredCount = app(ExpireOverdueTechnicalNotesUseCase::class)->handle();
 
@@ -202,5 +222,59 @@ class TechnicalNoteFlowTest extends TestCase
             ratificationDeadline: now()->addDays(30)->toDateString(),
             document: $this->document(),
         ), null);
+    }
+
+    public function test_a_non_pdf_attachment_is_rejected_below_presentation(): void
+    {
+        [$assignmentId] = $this->proposeNotMatched();
+
+        try {
+            app(AttachTechnicalNoteUseCase::class)->handle(new AttachTechnicalNoteDTO(
+                teacherAssignmentId: $assignmentId,
+                ratificationDeadline: now()->addDays(30)->toDateString(),
+                document: $this->document('text/plain'),
+            ), null);
+            $this->fail('Expected InvalidTechnicalNoteAttachmentException was not thrown.');
+        } catch (InvalidTechnicalNoteAttachmentException) {
+            // Expected — asserted via the catch itself.
+        }
+
+        $this->assertDatabaseCount('notas_tecnicas', 0);
+    }
+
+    public function test_a_past_deadline_is_rejected_below_presentation(): void
+    {
+        [$assignmentId] = $this->proposeNotMatched();
+
+        try {
+            app(AttachTechnicalNoteUseCase::class)->handle(new AttachTechnicalNoteDTO(
+                teacherAssignmentId: $assignmentId,
+                ratificationDeadline: now()->subDay()->toDateString(),
+                document: $this->document(),
+            ), null);
+            $this->fail('Expected InvalidTechnicalNoteDeadlineException was not thrown.');
+        } catch (InvalidTechnicalNoteDeadlineException) {
+            // Expected — asserted via the catch itself.
+        }
+
+        $this->assertDatabaseCount('notas_tecnicas', 0);
+    }
+
+    public function test_an_empty_deadline_is_rejected_below_presentation(): void
+    {
+        [$assignmentId] = $this->proposeNotMatched();
+
+        try {
+            app(AttachTechnicalNoteUseCase::class)->handle(new AttachTechnicalNoteDTO(
+                teacherAssignmentId: $assignmentId,
+                ratificationDeadline: '',
+                document: $this->document(),
+            ), null);
+            $this->fail('Expected InvalidTechnicalNoteDeadlineException was not thrown.');
+        } catch (InvalidTechnicalNoteDeadlineException) {
+            // Expected — asserted via the catch itself.
+        }
+
+        $this->assertDatabaseCount('notas_tecnicas', 0);
     }
 }

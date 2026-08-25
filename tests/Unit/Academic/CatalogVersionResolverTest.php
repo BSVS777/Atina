@@ -18,10 +18,16 @@ use Src\Academic\AffinityCatalog\Domain\Services\CatalogVersionResolver;
  *
  * D6 (the target date predates every existing version — see
  * `test_d6_target_date_before_all_versions_applies_the_earliest_as_provisional`)
- * is a **separate, still-unconfirmed** edge case: whether a future
- * version may apply retroactively. The professor has not answered this;
- * the fallback-to-earliest-version behavior below is preserved
- * unchanged and must not be read as professor-confirmed.
+ * is **resolved by applying the professor-confirmed general catalog
+ * fallback rule** ("when there is no catalog version appropriate to the
+ * target period, an available catalog version is used as fallback,
+ * marked provisional") to this specific edge case: since no prior
+ * version exists to prefer, the earliest available (future) version is
+ * used instead, still provisional. This is a documented application of
+ * the general rule to the predates-all-versions case — the professor was
+ * not separately asked this exact hypothetical, and this test must not
+ * be read as claiming otherwise. See the 2026-08-25 entry in
+ * `Docs/DIARIO_DECISIONES_IA.md`.
  */
 class CatalogVersionResolverTest extends TestCase
 {
@@ -89,6 +95,11 @@ class CatalogVersionResolverTest extends TestCase
         $this->assertTrue($result->isProvisional);
     }
 
+    /**
+     * D6: covered by the general fallback rule (see class docblock) —
+     * no prior version exists to prefer, so the earliest available
+     * version is used instead, marked provisional.
+     */
     public function test_d6_target_date_before_all_versions_applies_the_earliest_as_provisional(): void
     {
         $earliest = $this->version(1, '2025-01-01', '2025-12-31');
