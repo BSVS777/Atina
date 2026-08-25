@@ -122,4 +122,93 @@ class CatalogVersionResolverTest extends TestCase
         $this->assertSame($before, $result->version);
         $this->assertTrue($result->isProvisional);
     }
+
+    public function test_a_target_date_equal_to_the_validity_start_is_an_exact_match(): void
+    {
+        $version = $this->version(1, '2026-01-01', '2026-12-31');
+
+        $result = (new CatalogVersionResolver)->resolve([$version], new DateTimeImmutable('2026-01-01'));
+
+        $this->assertSame($version, $result->version);
+        $this->assertFalse($result->isProvisional);
+    }
+
+    public function test_a_target_date_equal_to_the_validity_end_is_an_exact_match(): void
+    {
+        // The end boundary is inclusive (AffinityCatalogVersion::coversDate).
+        $version = $this->version(1, '2026-01-01', '2026-12-31');
+
+        $result = (new CatalogVersionResolver)->resolve([$version], new DateTimeImmutable('2026-12-31'));
+
+        $this->assertSame($version, $result->version);
+        $this->assertFalse($result->isProvisional);
+    }
+
+    public function test_the_day_after_the_validity_end_is_no_longer_an_exact_match(): void
+    {
+        $version = $this->version(1, '2026-01-01', '2026-12-31');
+
+        $result = (new CatalogVersionResolver)->resolve([$version], new DateTimeImmutable('2027-01-01'));
+
+        $this->assertSame($version, $result->version);
+        $this->assertTrue($result->isProvisional);
+    }
+
+    public function test_the_covering_version_is_selected_regardless_of_input_order(): void
+    {
+        $old = $this->version(1, '2020-01-01', '2020-12-31');
+        $covering = $this->version(2, '2026-01-01', '2026-12-31');
+        $future = $this->version(3, '2030-01-01', '2030-12-31');
+        $target = new DateTimeImmutable('2026-05-01');
+
+        $sorted = (new CatalogVersionResolver)->resolve([$old, $covering, $future], $target);
+        $shuffled = (new CatalogVersionResolver)->resolve([$future, $covering, $old], $target);
+
+        $this->assertSame($covering, $sorted->version);
+        $this->assertSame($covering, $shuffled->version);
+        $this->assertFalse($shuffled->isProvisional);
+    }
+
+    public function test_the_prior_fallback_is_selected_regardless_of_input_order(): void
+    {
+        $oldest = $this->version(1, '2018-01-01', '2018-12-31');
+        $middle = $this->version(2, '2020-01-01', '2020-12-31');
+        $mostRecentPrior = $this->version(3, '2024-01-01', '2024-12-31');
+        $target = new DateTimeImmutable('2026-05-01');
+
+        $sorted = (new CatalogVersionResolver)->resolve([$oldest, $middle, $mostRecentPrior], $target);
+        $shuffled = (new CatalogVersionResolver)->resolve([$mostRecentPrior, $oldest, $middle], $target);
+
+        $this->assertSame($mostRecentPrior, $sorted->version);
+        $this->assertSame($mostRecentPrior, $shuffled->version);
+        $this->assertTrue($shuffled->isProvisional);
+    }
+
+    public function test_a_target_date_before_every_version_picks_the_earliest_not_the_newest(): void
+    {
+        $earliestFuture = $this->version(1, '2025-01-01', '2025-12-31');
+        $middleFuture = $this->version(2, '2027-01-01', '2027-12-31');
+        $newestFuture = $this->version(3, '2029-01-01', '2029-12-31');
+        $target = new DateTimeImmutable('2010-01-01');
+
+        $sorted = (new CatalogVersionResolver)->resolve([$earliestFuture, $middleFuture, $newestFuture], $target);
+        $shuffled = (new CatalogVersionResolver)->resolve([$newestFuture, $middleFuture, $earliestFuture], $target);
+
+        $this->assertSame($earliestFuture, $sorted->version);
+        $this->assertSame($earliestFuture, $shuffled->version);
+        $this->assertTrue($shuffled->isProvisional);
+    }
+
+    public function test_a_prior_version_is_preferred_over_a_nearer_future_version(): void
+    {
+        // 2024-12-31 is 5 months before the target, 2026-01-01 is only
+        // 1 month after it — D5 still prefers the prior version.
+        $prior = $this->version(1, '2024-01-01', '2024-12-31');
+        $nearerFuture = $this->version(2, '2026-01-01', '2026-12-31');
+
+        $result = (new CatalogVersionResolver)->resolve([$prior, $nearerFuture], new DateTimeImmutable('2025-12-01'));
+
+        $this->assertSame($prior, $result->version);
+        $this->assertTrue($result->isProvisional);
+    }
 }

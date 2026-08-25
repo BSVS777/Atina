@@ -2,12 +2,12 @@
 
 namespace Tests\Unit\Academic;
 
+use PHPUnit\Framework\TestCase;
 use Src\Academic\AcademicCredential\Application\DTOs\AcademicCredentialDTO;
 use Src\Academic\AcademicCredential\Application\UseCases\RegisterAcademicCredentialUseCase;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Domain\Exceptions\DuplicateCredentialException;
 use Src\Shared\Audit\Domain\Entities\AuditLogEntry;
-use Tests\TestCase;
 use Tests\Unit\Academic\Fakes\InMemoryAcademicCredentialRepository;
 use Tests\Unit\Academic\Fakes\InMemoryAuditLogRepository;
 

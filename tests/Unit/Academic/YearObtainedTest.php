@@ -3,8 +3,8 @@
 namespace Tests\Unit\Academic;
 
 use InvalidArgumentException;
+use PHPUnit\Framework\TestCase;
 use Src\Academic\AcademicCredential\Domain\YearObtained;
-use Tests\TestCase;
 
 class YearObtainedTest extends TestCase
 {
@@ -36,5 +36,10 @@ class YearObtainedTest extends TestCase
         $year = new YearObtained($currentYear);
 
         $this->assertSame($currentYear, $year->value());
+    }
+
+    public function test_accepts_the_earliest_plausible_year(): void
+    {
+        $this->assertSame(1950, (new YearObtained(1950))->value());
     }
 }
