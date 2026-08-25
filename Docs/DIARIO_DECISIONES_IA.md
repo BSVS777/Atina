@@ -1460,3 +1460,111 @@ a synthetic-permission test would not catch that regression.
   usually the one that exercises the *real* seeded/configured state
   (an actual role from `RoleSeeder`) rather than a synthetic stand-in
   that only proves the policy's `if` statement is syntactically correct.
+
+## 2026-08-24 — Batch 3: real TypeScript integration (data table)
+
+### AI consultation
+
+User asked to implement
+`Docs/Atina_Implementation_Prompt_Batches/03_BATCH_TYPESCRIPT.md`: add
+real, demonstrable TypeScript to the TALL stack without turning the app
+into a SPA and without replacing Livewire/Alpine/Blade/Tailwind, by
+migrating one existing production JS behavior (preference order:
+data table, Academic search/filter/export, sidebar nav, other). No JWT
+or external REST API work; no push.
+
+### Accepted
+
+- **`resources/js/data-table.ts`** replaces `resources/js/data-table.js`
+  verbatim in behavior — the reusable `Alpine.data('crudTable', ...)`
+  factory backing every client-mode `<x-ui.data-table>` (currently
+  Role and Permission management). Chosen because it's priority #1 in
+  the batch's own list and the most substantial, genuinely reusable
+  client behavior in the codebase (search/sort/pagination/i18n
+  summary), not a toy example.
+- Added `SortDirection`, `TableRow` (`Record<string, unknown>` — rows
+  are opaque plain-JSON per CRUD screen, so a shared concrete interface
+  would be fiction), `CrudTableConfig`, `DataTableRefreshEventDetail`,
+  and a `CrudTableState` interface describing the full Alpine component
+  contract (state, derived getters, actions). `init()` is typed with an
+  explicit `this: CrudTableState & AlpineWatcher` parameter so only the
+  one method that calls `$watch` needs to know about Alpine's injected
+  magic property, instead of threading it through every getter.
+- `resources/js/types/alpine.d.ts`: a minimal ambient `declare global`
+  for `Alpine.data(...)`, scoped to exactly what this file calls.
+  Alpine is not an npm dependency here — Livewire injects it as a
+  runtime global — so there is no `@types/alpinejs` to install; writing
+  the two-line surface actually used was more proportional than adding
+  a real Alpine dependency purely for its bundled types.
+- `tsconfig.json`: `strict: true`, `noEmit`, DOM + DOM.Iterable libs,
+  `moduleResolution: "Bundler"` (Vite-native), `noUncheckedIndexedAccess`
+  for extra safety on row/array access. Scoped to `resources/js/**` only.
+- `typescript` added as a devDependency; `"typecheck": "tsc --noEmit"`
+  script added to `package.json`.
+- `resources/js/app.js` now imports `./data-table.ts` (Vite resolves the
+  extension transparently); the stale in-repo comment pointing at the
+  old `.js` path (`role-component.blade.php`) was corrected to `.ts`.
+- Old `resources/js/data-table.js` deleted — fully superseded, no
+  remaining references.
+- README gets a short "Frontend stack" section stating TALL +
+  TypeScript, naming the migrated file, and the `npm run typecheck` /
+  `npm run build` commands.
+
+### Rejected
+
+- Migrating Academic search/filter/export or the sidebar-nav store
+  instead: the batch's own priority order puts the data table first,
+  and it's the more substantial, more reusable behavior of the two
+  remaining unmigrated candidates.
+- A generic `AlpineComponent<T>` "magic properties" helper type (with
+  `$el`, `$refs`, `$dispatch`, etc.) — this file only ever calls
+  `$watch`, so a single narrow `AlpineWatcher` interface used just on
+  `init()` was enough; a fuller helper would be speculative for
+  behavior that doesn't exist yet.
+- Installing `alpinejs` as a real npm dependency just to get its
+  bundled types — it isn't part of the actual runtime bundle (Livewire
+  supplies Alpine), so adding it would misrepresent the dependency graph
+  for a types-only benefit a two-line ambient declaration already gives.
+
+### Why
+
+The goal was TypeScript that is real and load-bearing — type-checked,
+compiled by Vite, and actually executed by the browser on an existing
+production screen — not an `example.ts` or a console demo. Picking the
+already-most-complex client behavior (search + sort + pagination +
+Livewire hand-off event contract) gives the strongest evidence that the
+migration is genuine, since a trivial file could pass typecheck without
+proving anything about real integration.
+
+### Verification
+
+- `npm run typecheck` — passes, zero errors.
+- `npm run build` — succeeds; `public/build/assets/app-*.js` contains
+  the compiled `crudTable` factory.
+- `php artisan test` — 128/128 passing (no PHP files changed; this
+  confirms the Blade/Livewire integration point was left intact).
+- `./vendor/bin/phpstan analyse` — 0 errors.
+- `./vendor/bin/pint --test` — fails, but only on pre-existing PHP
+  files this batch never touched (`HasRolesAndPermissions.php`,
+  `DDDStructure.php`, `RoleComponent.php`, etc.) — confirmed via
+  `git status` that none of them are part of this diff. Pre-existing
+  condition, out of this batch's scope.
+- Browser/E2E verification was attempted but not completed: the Claude
+  Chrome extension reported not connected, and a raw `curl`-based login
+  wasn't feasible because the login form is a Livewire component (CSRF
+  token lives in Livewire's snapshot/checksum protocol, not a plain
+  hidden input) — scripting that walk was disproportionate to what it
+  would verify beyond what typecheck/build/tests already cover. Manual
+  browser verification of the Roles screen is still recommended before
+  considering this fully closed.
+
+### Learning
+
+- On this project, Alpine.js has no corresponding npm package at all
+  (Livewire injects it at runtime) — any future `.ts` file that touches
+  `Alpine.*` needs its own ambient `declare global` addition (extend
+  `resources/js/types/alpine.d.ts` rather than duplicating a new one).
+- TypeScript's `this: T` parameter annotation is the proportional way
+  to type an Alpine `x-data` factory's magic properties (`$watch`,
+  `$refs`, ...) without forcing every unrelated getter/method in the
+  same object literal to also declare a wider `this` type it never uses.

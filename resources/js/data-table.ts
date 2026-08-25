@@ -22,11 +22,64 @@
  *   </div>
  *
  * Register once in resources/js/app.js:
- *   import './data-table.js';
+ *   import './data-table.ts';
  */
-document.addEventListener("alpine:init", () => {
-  Alpine.data("crudTable", (config = {}) => ({
-    // ---- state -----------------------------------------------------
+
+type SortDirection = "asc" | "desc";
+
+/** A row is opaque, plain-JSON data — its shape differs per CRUD screen. */
+type TableRow = Record<string, unknown>;
+
+interface CrudTableConfig {
+  rows?: TableRow[];
+  searchable?: string[];
+  sortKey?: string | null;
+  sortDir?: SortDirection;
+  perPage?: number;
+}
+
+interface DataTableRefreshEventDetail {
+  rows: TableRow[];
+}
+
+interface AlpineWatcher {
+  $watch<T>(property: string, callback: (value: T, oldValue: T) => void): void;
+}
+
+interface CrudTableState {
+  // ---- state -----------------------------------------------------
+  rows: TableRow[];
+  searchable: string[];
+  search: string;
+  perPage: number;
+  page: number;
+  sortKey: string | null;
+  sortDir: SortDirection;
+
+  init(this: CrudTableState & AlpineWatcher): void;
+
+  // ---- derived data ------------------------------------------------
+  readonly filtered: TableRow[];
+  readonly sorted: TableRow[];
+  readonly total: number;
+  readonly lastPage: number;
+  readonly from: number;
+  readonly to: number;
+  readonly pageRows: TableRow[];
+  readonly pageSet: number[];
+
+  // ---- actions -----------------------------------------------------
+  sort(key: string): void;
+  previousPage(): void;
+  nextPage(): void;
+  gotoPage(p: number): void;
+
+  // ---- i18n helper -------------------------------------------------
+  paginationSummary(template: string): string;
+}
+
+function crudTable(config: CrudTableConfig = {}): CrudTableState {
+  return {
     rows: config.rows ?? [],
     searchable: config.searchable ?? [],
     search: "",
@@ -64,7 +117,9 @@ document.addEventListener("alpine:init", () => {
       // ever needs two independent client-mode tables at once, this
       // needs a per-table event name instead of a shared one.
       window.addEventListener("data-table-refresh", (event) => {
-        this.rows = event.detail.rows;
+        const detail = (event as CustomEvent<DataTableRefreshEventDetail>)
+          .detail;
+        this.rows = detail.rows;
         this.page = 1;
       });
     },
@@ -85,18 +140,19 @@ document.addEventListener("alpine:init", () => {
 
     get sorted() {
       if (!this.sortKey) return this.filtered;
+      const key = this.sortKey;
 
       const dir = this.sortDir === "desc" ? -1 : 1;
 
       return [...this.filtered].sort((a, b) => {
-        const av = a[this.sortKey];
-        const bv = b[this.sortKey];
+        const av = a[key];
+        const bv = b[key];
 
         if (av === bv) return 0;
 
-        return typeof av === "string"
+        return typeof av === "string" && typeof bv === "string"
           ? av.localeCompare(bv) * dir
-          : av > bv
+          : av != null && bv != null && av > bv
             ? dir
             : -dir;
       });
@@ -166,7 +222,6 @@ document.addEventListener("alpine:init", () => {
       this.page = Math.max(1, Math.min(this.lastPage, p));
     },
 
-    // ---- i18n helper -------------------------------------------------
     // Laravel's __() with no replacement array returns the string with
     // its :placeholders intact, e.g. "Mostrando :from a :to de :total
     // registros" (see lang/es.json). We only fill in the numbers here,
@@ -174,9 +229,13 @@ document.addEventListener("alpine:init", () => {
     // translation files — no English fallback ever leaks into the UI.
     paginationSummary(template) {
       return template
-        .replace(":from", this.from)
-        .replace(":to", this.to)
-        .replace(":total", this.total);
+        .replace(":from", String(this.from))
+        .replace(":to", String(this.to))
+        .replace(":total", String(this.total));
     },
-  }));
+  };
+}
+
+document.addEventListener("alpine:init", () => {
+  Alpine.data("crudTable", crudTable);
 });

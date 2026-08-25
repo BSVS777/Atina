@@ -69,6 +69,20 @@ All seeded with password `12345678`.
 | `/academic/teacher-assignments` | Propose teachers, verification results, Technical Note, No Catalog (DO-02a/02b/02d) |
 | `/roles`, `/permissions` | RBAC management |
 
+## Frontend stack
+
+TALL (Tailwind, Alpine, Laravel, Livewire) + TypeScript. TypeScript is used
+for real, type-checked client behavior — not a demo file — starting with
+the reusable client-side CRUD data table (`resources/js/data-table.ts`,
+wired into `resources/js/app.js` and bundled by Vite). Alpine and Livewire
+are unchanged; this is a focused migration of one existing behavior, not a
+SPA rewrite.
+
+```bash
+npm run typecheck
+npm run build
+```
+
 ## Tests
 
 ```bash

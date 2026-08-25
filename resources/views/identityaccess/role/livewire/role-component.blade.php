@@ -35,7 +35,7 @@
         @if ($tableMode === 'client')
         {{-- Client mode: Alpine renders rows from the in-browser `pageRows`
                      collection (search/sort/pagination already resolved with zero
-                     server round-trips). See resources/js/data-table.js. --}}
+                     server round-trips). See resources/js/data-table.ts. --}}
         <template x-for="row in pageRows" :key="row.id">
             <div class="data-row" role="row">
                 <div class="name-cell">
