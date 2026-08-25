@@ -16,7 +16,7 @@ development decision log.
 
 ```bash
 composer install
-npm install
+npm ci
 cp .env.example .env
 php artisan key:generate
 ```
@@ -82,6 +82,9 @@ SPA rewrite.
 npm run typecheck
 npm run build
 ```
+
+`typescript` is a devDependency, so `npm ci` (not `npm ci --omit=dev`) must be
+used in every environment that runs `typecheck` or `build` — including CI.
 
 ## Tests
 

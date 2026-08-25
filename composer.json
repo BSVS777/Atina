@@ -53,7 +53,8 @@
       "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
       "@php artisan key:generate",
       "@php artisan migrate --force",
-      "npm install",
+      "npm ci",
+      "npm run typecheck",
       "npm run build"
     ],
     "dev": [
