@@ -23,15 +23,40 @@ class TeacherExportTest extends TestCase
         $this->actingAs($this->userWithTeacherManagementPermissions());
         Teacher::factory()->create();
 
-        // The real PdfExporterInterface renders via headless Chrome
-        // (Browsershot/Puppeteer), which isn't installed in this test
-        // environment — the fake exercises the same authorize() + wiring
-        // + Content-Type path without needing a real browser.
+        // The real PdfExporterInterface (SpatiePdfExporter → DOMPDF) works
+        // fine here too — see test_the_real_pdf_pipeline_renders_the_actual_report_template
+        // below — but the fake still exercises the same authorize() +
+        // wiring + Content-Type path with plain, greppable HTML instead of
+        // a PDF binary.
         $this->app->instance(PdfExporterInterface::class, new CapturingPdfExporter);
 
         Livewire::test(TeacherComponent::class)
             ->call('exportPdf')
             ->assertFileDownloaded('docentes.pdf', contentType: 'application/pdf');
+    }
+
+    /**
+     * Every other test in this file swaps in CapturingPdfExporter so the
+     * assertion can grep the rendered HTML directly. This one leaves the
+     * real PdfExporterInterface binding (SpatiePdfExporter → DOMPDF) in
+     * place, proving the actual `exports/table-pdf.blade.php` template —
+     * including its DOMPDF-safe header layout, DejaVu Sans fonts, and PNG
+     * logo — renders to a real, valid PDF end to end, not just that the
+     * wiring/authorization is correct.
+     */
+    public function test_the_real_pdf_pipeline_renders_the_actual_report_template(): void
+    {
+        $this->actingAs($this->userWithTeacherManagementPermissions());
+        Teacher::factory()->create(['first_name' => 'Ana', 'last_name' => 'Rojas', 'second_last_name' => 'Vega']);
+
+        $response = Livewire::test(TeacherComponent::class)->call('exportPdf');
+
+        $response->assertFileDownloaded('docentes.pdf', contentType: 'application/pdf');
+
+        $pdfBytes = base64_decode(data_get($response->effects, 'download.content'));
+
+        $this->assertStringStartsWith('%PDF-', $pdfBytes);
+        $this->assertGreaterThan(1000, strlen($pdfBytes), 'A rendered report with a header, logo, and a data row should produce more than a trivially empty PDF.');
     }
 
     public function test_a_user_with_permission_can_download_the_xlsx(): void

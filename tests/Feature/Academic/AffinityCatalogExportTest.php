@@ -25,10 +25,11 @@ class AffinityCatalogExportTest extends TestCase
         $course = Course::factory()->create();
         AffinityCatalogVersion::factory()->create(['curso_id' => $course->id]);
 
-        // The real PdfExporterInterface renders via headless Chrome
-        // (Browsershot/Puppeteer), which isn't installed in this test
-        // environment — the fake exercises the same authorize() + wiring
-        // + Content-Type path without needing a real browser.
+        // The real PdfExporterInterface (SpatiePdfExporter → DOMPDF) would
+        // work fine here too (see SpatiePdfExporterTest and
+        // TeacherExportTest for real-pipeline coverage of this shared
+        // infrastructure) — the fake is used here so the assertion can
+        // grep plain HTML instead of a PDF binary.
         $this->app->instance(PdfExporterInterface::class, new CapturingPdfExporter);
 
         Livewire::test(AffinityCatalogComponent::class)
