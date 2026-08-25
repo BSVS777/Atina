@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Src\Academic\AcademicCredential\Domain\Contracts\AcademicCredentialRepositoryInterface;
 use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
+use Src\Academic\AcademicCredential\Domain\Exceptions\CorruptCredentialRecordException;
 use Src\Academic\AcademicCredential\Domain\StudyPeriod;
 use Src\Academic\AcademicCredential\Infrastructure\Persistence\Casts\DegreeLevelCast;
 
@@ -73,6 +74,10 @@ final class EloquentAcademicCredentialRepository implements AcademicCredentialRe
 
     private function toDomain(AcademicCredentialModel $model): AcademicCredential
     {
+        if ($model->getRawOriginal('fecha_inicio') === null || $model->getRawOriginal('fecha_fin') === null) {
+            throw CorruptCredentialRecordException::missingStudyPeriod($model->id);
+        }
+
         return new AcademicCredential(
             id: $model->id,
             teacherId: $model->docente_id,
