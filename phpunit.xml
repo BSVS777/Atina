@@ -26,6 +26,9 @@
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
+        <env name="JWT_SECRET" value="test-only-secret-3f9c2b7a1d8e4f6091c5a2b7d8e6f4109c5"/>
+        <env name="JWT_TTL" value="60"/>
+        <env name="JWT_ISSUER" value="Atina-Test"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

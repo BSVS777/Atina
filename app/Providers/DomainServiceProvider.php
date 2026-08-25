@@ -28,6 +28,8 @@ use Src\Academic\TeacherAssignment\Infrastructure\Persistence\Repositories\Eloqu
 use Src\Academic\TeacherAssignment\Infrastructure\Persistence\Repositories\EloquentTechnicalNoteRepository;
 use Src\Academic\TeacherAssignment\Presentation\Policies\TeacherAssignmentPolicy;
 use Src\Academic\TeacherAssignment\Presentation\Policies\TechnicalNotePolicy;
+use Src\IdentityAccess\Authentication\Domain\Contracts\TokenServiceInterface;
+use Src\IdentityAccess\Authentication\Infrastructure\Services\JwtTokenService;
 use Src\IdentityAccess\Permission\Domain\Contracts\PermissionRepositoryInterface;
 use Src\IdentityAccess\Permission\Domain\Entities\Permission;
 use Src\IdentityAccess\Permission\Infrastructure\Persistence\Repositories\EloquentPermissionRepository;
@@ -79,6 +81,12 @@ final class DomainServiceProvider extends ServiceProvider
         foreach ($this->domainBindings as $interface => $implementation) {
             $this->app->bind($interface, $implementation);
         }
+
+        $this->app->singleton(TokenServiceInterface::class, fn (): JwtTokenService => new JwtTokenService(
+            secret: (string) config('jwt.secret'),
+            ttlMinutes: (int) config('jwt.ttl'),
+            issuer: (string) config('jwt.issuer'),
+        ));
     }
 
     public function boot(): void

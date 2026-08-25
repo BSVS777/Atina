@@ -2028,3 +2028,200 @@ without touching JWT/external-API work or the Academic module.
   browser interaction (clicking Create, watching the modal's live
   missing-only selects, checking the console) is still recommended before
   considering this fully closed.
+
+---
+
+## 2026-08-25 — Batch 4: real JWT API authentication boundary
+
+### AI consultation
+
+User asked to implement
+`Docs/Atina_Implementation_Prompt_Batches/04_BATCH_JWT.md`: add a
+real JWT-authenticated API boundary (`routes/api.php`) alongside the
+existing Fortify/session web auth, without replacing it, without
+selecting an external REST API provider, and without pushing.
+
+### Pre-flight findings
+
+- No `routes/api.php`, no `config/auth.php` `api` guard, no JWT
+  dependency in `composer.json` before this batch — the API boundary
+  did not exist at all.
+- RBAC is a dependency-free, Spatie-inspired trait
+  (`App\Concerns\HasRolesAndPermissions`) on `App\Models\User`
+  (`roles`/`permissions` many-to-many, `hasPermissionTo()` checking
+  both direct and role-inherited grants) — no package to reuse or
+  duplicate.
+- `bootstrap/app.php` already sets
+  `shouldRenderJsonWhen(fn ($r) => $r->is('api/*') || $r->expectsJson())`,
+  so JSON error rendering for `/api/*` was already correct before this
+  batch touched anything.
+- `src/IdentityAccess/{Permission,Role}` is the existing hexagonal-DDD
+  convention (`Domain/Application/Infrastructure/Presentation`), with
+  `Presentation/Routes/web.php` auto-loaded by
+  `DomainServiceProvider::loadContextRoutes()` via a glob. That glob
+  only covers `web.php`, and the batch explicitly asked for a
+  conventional `routes/api.php`, so the new context's routes are wired
+  through the standard Laravel `routes/api.php` entry point instead of
+  extending the glob — the controller/middleware classes still live
+  under the DDD structure.
+
+### Accepted
+
+- **`firebase/php-jwt` v7.1.0** (composer, no vulnerability advisories)
+  as the signing library. Chosen over a Laravel-specific package
+  (`tymon/jwt-auth` and forks) because it is a minimal encode/decode
+  primitive with no opinion about guards, config surface, or app
+  bootstrapping — the batch explicitly asked to keep JWT-library
+  classes out of Domain behind a `TokenServiceInterface`, which fits a
+  primitive library far better than adopting a second, competing auth
+  framework on top of Fortify.
+- New bounded context `Src\IdentityAccess\Authentication`:
+  - `Domain\Contracts\TokenServiceInterface` — `issue(Authenticatable): IssuedToken`,
+    `resolveSubject(string): int`. No Eloquent, no JWT types.
+  - `Domain\ValueObjects\IssuedToken`, `Domain\Exceptions\{TokenException,
+    InvalidTokenException, ExpiredTokenException, InvalidCredentialsException}`.
+  - `Infrastructure\Services\JwtTokenService` — the only class in the
+    context allowed to import `Firebase\JWT\*`; maps every decode
+    failure to `InvalidTokenException` except `ExpiredException`,
+    which maps to `ExpiredTokenException`.
+  - `Application\UseCases\AuthenticateUserUseCase` — looks up
+    `App\Models\User` directly (not a Domain entity: there is no
+    business logic here beyond "check the password hash, issue a
+    token," matching `AI_HARNESS.md`'s "don't force DDD layers onto
+    entities with no real domain logic"; the existing `Role`/`Permission`
+    Domain entities are intentionally not reused for the same reason
+    Fortify itself doesn't route through them).
+  - `Presentation\Http\{Controllers\AuthController, Middleware\AuthenticateJwt,
+    Requests\LoginRequest}`.
+- `routes/api.php` (new): `POST /api/auth/login` (no middleware —
+  Laravel's default `api` middleware group carries no session/CSRF),
+  `GET /api/me` behind the new `jwt.auth` alias.
+- `bootstrap/app.php`: `withRouting(api: ...)` added; `jwt.auth` alias
+  registered for `AuthenticateJwt`.
+- `AuthenticateJwt` middleware returns the *same* generic
+  `401 {"message":"Unauthenticated."}` for every rejection reason
+  (missing header, malformed token, bad signature, expired) — this was
+  a deliberate reading of "consistent JSON without leaking
+  cryptographic details": distinguishing the reasons in the response
+  would itself be the leak.
+- `DomainServiceProvider::register()` binds `TokenServiceInterface` as
+  a singleton built from `config('jwt.*')`, alongside the existing
+  interface→implementation array (which can't express constructor
+  args, so this one binding is a small explicit exception to that
+  loop).
+- New `config/jwt.php` (`secret`, `ttl` minutes, `issuer`); `.env.example`
+  documents `JWT_SECRET`/`JWT_TTL`/`JWT_ISSUER` with key-generation
+  instructions in a comment; local `.env` (gitignored) got a freshly
+  generated secret so the app actually runs.
+- `phpunit.xml` got its own `JWT_SECRET`/`JWT_TTL`/`JWT_ISSUER` test
+  values, separate from the local `.env` secret.
+- Added `App\Concerns\HasRolesAndPermissions::allPermissionNames()`
+  (direct + role-inherited permission names, deduplicated) — this
+  aggregate didn't exist before (only per-permission `hasPermissionTo`
+  checks did) and is needed by `/api/me`; reusing it there means the
+  API's authorization data is read off the exact same relations the
+  web UI already uses, not a parallel computation.
+- `/api/me` returns `id, name, email, roles, permissions` and requires
+  `$request->user()` (set via `setUserResolver()` in the middleware) —
+  no custom Guard class or `Auth::viaRequest()` closure was introduced;
+  the middleware resolves the user itself and hands it to the request,
+  which is enough for a stateless JSON endpoint and avoids fighting
+  Laravel's guard abstraction for a single route.
+
+### Rejected
+
+- `tymon/jwt-auth` / `php-open-source-saver/jwt-auth` — full guard-based
+  JWT auth frameworks; would have meant configuring a second competing
+  auth stack next to Fortify for a feature this batch needs only two
+  routes from.
+- A custom `Auth::viaRequest()` guard or a full `Illuminate\Contracts\Auth\Guard`
+  implementation — the explicit middleware class the batch asked for
+  already satisfies every required behavior (401 on missing/malformed/
+  bad-signature/expired, `$request->user()` populated on success)
+  without adding the indirection of a second authentication mechanism
+  Laravel has to know about.
+- Reusing the `Src\IdentityAccess\Role`/`Permission` Domain entities
+  inside `AuthenticateUserUseCase` or `AuthController::me()` — those
+  entities exist to enforce the Permission catalog's business rules on
+  *writes* (create/edit/delete permissions and roles); reading a user's
+  roles/permissions for a JSON response is a plain relation read, and
+  routing it through the Domain entities would add a translation layer
+  with no behavior to justify it.
+- Rate-limiting `/api/auth/login` — not requested by the batch and out
+  of scope; flagged below as a visible follow-up instead of added
+  speculatively.
+
+### Why
+
+The batch's own framing — "prefer a minimal maintained implementation,"
+"keep JWT out of Domain," "do not introduce an oversized auth
+framework" — pointed at composing a small `TokenServiceInterface`
+around a primitive encode/decode library rather than adopting a second
+Laravel auth package. This keeps Fortify as the only thing that owns
+"authentication" as a concept for the web app, with the JWT boundary
+existing purely as an alternate credential-to-identity path for JSON
+clients that terminates at the same `User` row and the same RBAC
+relations.
+
+### Follow-up / visible risk
+
+- `/api/auth/login` has no rate limiting (`throttle:api` is not
+  registered — Laravel 13's `api` middleware group ships with no
+  default limiter, matching the framework's out-of-the-box behavior,
+  and Fortify's own `login` limiter only applies to `routes/web.php`).
+  A brute-force-resistant login endpoint would need a `RateLimiter::for('api-login', ...)`
+  registration plus a `throttle:api-login` on the route — left out
+  because it wasn't in the batch's scope, not because it's unimportant.
+- `External REST API → pending professor selection.` This batch
+  deliberately does not choose or implement one — see the batch file's
+  explicit instruction and `Docs/ACADEMIC_AFFINITY_REQUIREMENTS_MATRIX.md`'s
+  existing "NOT_APPLICABLE" row for the same item.
+
+### Verification
+
+- New tests: `tests/Feature/Api/JwtAuthenticationTest.php` (10) — valid
+  credentials return a token; wrong password and unknown email both
+  401; `/api/me` 401 with no token, a malformed token, a token signed
+  with a different secret, and an expired token (both forged directly
+  with `Firebase\JWT\JWT::encode()` against the app's real
+  `config('jwt.secret')` where relevant); a valid token reaches
+  `/api/me` and returns the right id/name/email; roles and
+  role-inherited permissions round-trip through the real `Docente` and
+  `Administrador` seeded roles (via `PermissionSeeder`/`RoleSeeder`).
+- `php artisan test` — 177/177 passing (up from 167; includes the
+  pre-existing `tests/Feature/Auth/AuthenticationTest.php` unchanged
+  and still green, confirming Fortify/session login was not disturbed).
+- `./vendor/bin/phpstan analyse --memory-limit=1G` — 0 errors.
+- `./vendor/bin/pint --test` — the batch's own files (`HasRolesAndPermissions.php`,
+  `tests/Feature/Api/JwtAuthenticationTest.php`, and every new file
+  under `src/IdentityAccess/Authentication/`) pass cleanly (two were
+  auto-fixed with `./vendor/bin/pint <path>` scoped to only those
+  files). Remaining repo-wide `pint --test` failures are on files this
+  batch never touched (`DDDStructure.php`, `Logout.php`,
+  `FortifyServiceProvider.php`, `RoleComponent.php`, etc.) — pre-existing,
+  confirmed via `git status`.
+- `npm run typecheck` — 0 errors. `npm run build` — succeeds (no
+  frontend files changed by this batch).
+- Manual HTTP verification against the real running app
+  (`php artisan serve`, real MySQL `gestion_academica_utn`): created a
+  throwaway user (`batch4-jwt-check@example.test`), confirmed
+  `POST /api/auth/login` returns 401 on a wrong password and a real
+  Bearer token + `expires_in: 3600` on the right one; confirmed
+  `GET /api/me` returns 401 with no `Authorization` header and 401
+  with `Authorization: Bearer not-a-jwt`, then 200 with the correct
+  id/name/email using the real token. Deleted the throwaway user
+  immediately after (confirmed 0 rows remaining) — no permanent change
+  to the real database.
+
+### Learning
+
+- A trait method with a hard `Illuminate\Database\Eloquent\Collection`
+  return type crashed at runtime (`TypeError`) the first time it was
+  actually exercised through a real HTTP request, even though PHPStan
+  and the file's own logic looked correct: `Collection::pluck()` on an
+  Eloquent collection returns a base `Illuminate\Support\Collection`,
+  not another Eloquent collection, so a same-named `use` import
+  silently pointed the type hint at the wrong class. Caught by the
+  `php artisan test` run, not by static analysis — a concrete argument
+  for the harness's "independent verification" requirement even on
+  code that type-checks.
