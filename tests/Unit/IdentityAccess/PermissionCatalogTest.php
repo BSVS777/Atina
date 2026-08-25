@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\IdentityAccess;
 
+use PHPUnit\Framework\TestCase;
 use Src\IdentityAccess\Permission\Domain\ValueObjects\PermissionCatalog;
-use Tests\TestCase;
 
 class PermissionCatalogTest extends TestCase
 {
@@ -53,5 +53,57 @@ class PermissionCatalogTest extends TestCase
     {
         $this->assertFalse(PermissionCatalog::isOfficial('atinencia', 'delete_everything'));
         $this->assertFalse(PermissionCatalog::isOfficial('atinencias', 'verificar'));
+    }
+
+    public function test_is_official_is_case_sensitive_and_does_not_trim(): void
+    {
+        $this->assertFalse(PermissionCatalog::isOfficial('roles', 'Edit'));
+        $this->assertFalse(PermissionCatalog::isOfficial('Roles', 'edit'));
+        $this->assertFalse(PermissionCatalog::isOfficial('roles', ' edit'));
+    }
+
+    public function test_no_technical_permission_name_is_declared_twice(): void
+    {
+        // A duplicated module.action would let two rows claim the same
+        // authorization contract and break the "closed catalog" premise.
+        $names = [];
+
+        foreach (PermissionCatalog::all() as $module => $actions) {
+            foreach ($actions as $action) {
+                $names[] = "{$module}.{$action}";
+            }
+        }
+
+        $this->assertSame($names, array_values(array_unique($names)));
+    }
+
+    public function test_no_module_declares_the_same_action_twice(): void
+    {
+        foreach (PermissionCatalog::all() as $module => $actions) {
+            $this->assertSame(
+                array_values(array_unique($actions)),
+                array_values($actions),
+                "Module [{$module}] declares a duplicated action.",
+            );
+        }
+    }
+
+    public function test_every_declared_module_offers_at_least_one_action(): void
+    {
+        foreach (PermissionCatalog::modules() as $module) {
+            $this->assertNotSame([], PermissionCatalog::actionsFor($module), "Module [{$module}] declares no action.");
+        }
+    }
+
+    public function test_every_declared_combination_is_recognised_as_official(): void
+    {
+        foreach (PermissionCatalog::all() as $module => $actions) {
+            foreach ($actions as $action) {
+                $this->assertTrue(
+                    PermissionCatalog::isOfficial($module, $action),
+                    "[{$module}.{$action}] is declared but not recognised as official.",
+                );
+            }
+        }
     }
 }
