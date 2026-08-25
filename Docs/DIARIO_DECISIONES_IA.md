@@ -2980,3 +2980,162 @@ hints and the two new use cases' server-side guards structurally cannot
 disagree. It also surfaced a duplication `git blame` wouldn't have shown
 directly — the matching algorithm only *looked* like it belonged to
 "propose" until a second caller (edit) needed the identical logic.
+
+## 2026-08-25 — Unit-test expansion for the isolated business rules
+
+### AI consultation
+
+The professor requires unit tests explicitly (SRS §3b). The suite was
+already substantial (224 tests, all green), so the question asked was not
+"add tests" but "does this suite actually contain *unit* tests, or does
+it prove the business rules only through Livewire, HTTP and Eloquent?"
+The pass began with a full audit of `tests/Unit`, `tests/Feature`,
+`src/**`, `app/Models` and `app/Concerns`, classifying every
+unit-testable class as covered, covered-only-indirectly, or uncovered,
+before any test was written.
+
+### Accepted
+
+- **The audit's uncomfortable finding: part of `tests/Unit` was not
+  unit-testing.** 7 of the 12 classes under `tests/Unit` extended
+  `Tests\TestCase`, booting the entire Laravel application (and
+  `Http::preventStrayRequests()`) to exercise pure PHP with no framework
+  dependency whatsoever. `tests/Unit/ExampleTest.php` even declared
+  `RefreshDatabase` on a plain `PHPUnit\Framework\TestCase`, where the
+  trait is inert. All of them now extend `PHPUnit\Framework\TestCase`.
+  Nothing was weakened: the same assertions now additionally *prove* that
+  those rules need no framework at all. The whole unit suite runs in
+  ~0.22 s, which is itself the evidence.
+- **Direct unit coverage for the rules that had none.** The audit found
+  the DO-02a decision itself (`RunAffinityVerificationUseCase`),
+  `AttachTechnicalNoteUseCase`, `DecideNoCatalogAssignmentUseCase`,
+  `EditTeacherAssignmentUseCase`, `DeleteTeacherAssignmentUseCase`,
+  `AssignmentOverview::hasProtectedHistory()`, the `TechnicalNote` state
+  machine, the `Role` aggregate, `JwtTokenService`, `AuditLogEntry` and
+  `PermissionLabelFormatter` were reachable only through Feature tests.
+  15 new unit classes now drive each of them directly.
+- **In-memory fakes implementing the real ports, instead of mocks.** Six
+  fakes (`InMemoryTeacherAssignmentRepository`,
+  `InMemoryAffinityVerificationRepository`,
+  `InMemoryTechnicalNoteRepository`,
+  `InMemoryAffinityCatalogVersionRepository`,
+  `InMemoryPermissionRepository`, `FakeAuthenticatable`) implement the
+  production interfaces, so the compiler/PHPStan keeps them honest and a
+  contract change breaks the fake instead of silently passing.
+- **Branch and boundary coverage where the rubric actually discriminates.**
+  Catalog resolution is now proven at `target == validFrom`,
+  `target == validUntil`, `validUntil + 1 day`, and — importantly — for
+  *input-order independence*: the covering, prior-fallback and
+  future-fallback branches each get the same answer from a shuffled
+  version list as from a sorted one. The four verification outcomes are
+  proven exhaustively, including that the automatic run can never produce
+  "Nota técnica", and that two runs differing *only* in `DegreeLevel`
+  return the identical result (degree level does not decide affinity).
+- **Deterministic time without a clock abstraction.** JWT expiry is
+  provoked with a negative TTL (the service already derives `exp` from
+  the injected TTL), and the Technical Note deadline tests derive their
+  inputs from the same `DateTimeImmutable('today')` anchor the use case
+  itself reads. No `ClockInterface` was introduced for the sake of tests.
+- **PHPUnit attribute data providers** (`#[DataProvider]`) for the cases
+  where they genuinely compress duplication: non-PDF MIME types, resolved
+  Technical Note statuses, already-decided proposal statuses, ineligible
+  verification results, malformed JWTs, protected role names.
+
+### Rejected
+
+- **Moving Feature tests into `tests/Unit` to satisfy the requirement.**
+  That would have inflated the unit count while proving less. Every
+  Feature test was kept exactly as it was; the new unit tests sit
+  *underneath* them.
+- **Extracting a "deletion eligibility policy" class to make deletion
+  testable.** `AssignmentOverview::hasProtectedHistory()` is already
+  framework-neutral and already the single shared definition used by both
+  guards — it was directly unit-testable as-is. Extracting anything here
+  would have been architecture for its own sake.
+- **Extracting an OpenAlex response mapper.** `mapResult()` is a handful
+  of `is_string()` guards over five fields; the existing
+  `Http::fake()`-based adapter test covers it at the boundary where the
+  provider's shape actually matters. Pulling it into a separate class
+  would add an indirection to test five null checks.
+- **Unit-testing `App\Concerns\HasRolesAndPermissions`.** Every method on
+  it is an Eloquent relation query or a `Collection` over loaded
+  relations. There is no framework-free logic to isolate, so it stays
+  honest Feature-test territory rather than being dragged into
+  `tests/Unit` behind a mocked query builder.
+- **Mocking the class under test, and mocking Laravel internals**
+  (`Auth`, `Hash`, the query builder). `AuthenticateUserUseCase` reaches
+  `User::query()` and `Hash::check` directly, so its credential check
+  remains a Feature test; only the token half of that flow — behind
+  `TokenServiceInterface` — is unit-tested.
+- **Asserting exact totals as if they were contracts.** The pre-existing
+  "30 official permissions" assertions were left untouched, but the new
+  catalog tests are structural: no duplicated `module.action`, every
+  declared module offers at least one action, every declared combination
+  is recognised as official.
+- **Actual mutation testing.** No mutation tool exists in
+  `composer.json`, and installing one was out of scope. The
+  mutation-style review was therefore a reasoning pass over the critical
+  predicates (specialty membership, `coversDate` boundaries, provisional
+  flag, MIME equality, deadline comparison, catalog membership, protected
+  deletion, JWT expiry/signature, minimum query length), each traced to
+  the specific test that fails if the condition is inverted.
+- **Fabricating a coverage percentage.** Neither Xdebug nor PCOV is
+  loaded (`php -m`), and installing a driver was out of scope, so no
+  coverage number is reported anywhere in this pass.
+
+### Why
+
+A Feature test proves "the screen behaves correctly today". A unit test
+proves "this rule is correct independently of the screen" — which is the
+claim the SRS's unit-test requirement is actually about, and the claim
+that survives a UI rewrite. The affinity decision, the catalog fallback
+and the Technical Note invariants are the parts of this system a reviewer
+will interrogate; they should be provable without a database.
+
+### Corrections
+
+- No production defect was discovered. The added tests confirmed the
+  existing behavior on every branch, so **no production code was changed
+  in this pass** — the diff is tests and documentation only.
+- Corrected the suite's own honesty, as described under Accepted: 7
+  Laravel-booting "unit" tests reclassified to plain PHPUnit, and an
+  inert `RefreshDatabase` trait removed from `tests/Unit/ExampleTest.php`.
+- Closed a gap this repo's own audit had already flagged: DO-02b's
+  attachment invariant was previously exercised with a single non-PDF
+  case; it now runs against six distinct MIME types including an empty
+  one, and additionally asserts that a rejected attachment persists
+  nothing at all (no note, no audit entry, no extra verification row).
+
+### Verification
+
+- `php artisan test tests/Unit`: **214/214 passing**, 425 assertions,
+  ~0.22 s (up from 44 tests / 81 assertions).
+- `php artisan test`: **394/394 passing**, 861 assertions, ~12 s (up from
+  the 224-test baseline — no regressions, no test deleted or weakened).
+- Isolation proven, not assumed: `tests/Unit` contains zero references to
+  `Tests\TestCase`, `RefreshDatabase`, `Illuminate\Support\Facades\*`,
+  Livewire or HTTP routes; all 22 unit classes extend
+  `PHPUnit\Framework\TestCase`.
+- `./vendor/bin/phpstan analyse --memory-limit=1G`: 0 errors.
+- `./vendor/bin/pint --test tests/Unit`: clean. The whole-repo run still
+  fails only on the same 18 pre-existing baseline files outside
+  `src/Academic`, none of them touched here.
+- `npm run typecheck`: 0 errors — note that `typescript` was missing from
+  `node_modules` in this environment and had to be installed with
+  `npm install --no-save` to run the gate at all; `package.json` and
+  `package-lock.json` are unchanged. `npm run build`: succeeds.
+- Code coverage percentage: **unavailable in this environment** (no
+  Xdebug, no PCOV).
+
+### Learning
+
+The useful question was never "how many tests are there" but "what does
+each test still prove if you delete the framework". Answering it exposed
+that a directory name (`tests/Unit`) had been doing the classifying, not
+the tests themselves — and that the project's most rubric-relevant rules
+(catalog fallback, the four outcomes, the DO-02b invariants) were only
+provable through a database. The in-memory fakes were the cheap part; the
+expensive, valuable part was enumerating the branches — especially
+input-order independence in `CatalogVersionResolver`, which no Feature
+test could have exercised because the repository always hands back rows
+in one fixed order.

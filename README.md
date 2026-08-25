@@ -86,10 +86,21 @@ npm run build
 ## Tests
 
 ```bash
+php artisan test tests/Unit
 php artisan test
 ./vendor/bin/pint --dirty
-./vendor/bin/phpstan analyse
+./vendor/bin/phpstan analyse --memory-limit=1G
 ```
+
+The suite is split into two levels, and the split is meaningful:
+
+- `tests/Unit` — isolated business rules (domain entities, value objects,
+  domain services, application use cases). No Laravel container, no
+  database, no HTTP, no Livewire, no network: collaborators are replaced
+  by in-memory fakes under `tests/Unit/**/Fakes`, so the whole suite runs
+  in well under a second.
+- `tests/Feature` — the same behavior through the framework: routes,
+  Livewire components, policies, Eloquent persistence and the JWT API.
 
 The automated test suite runs against an isolated in-memory SQLite
 database (`phpunit.xml`), never against the MySQL database configured in

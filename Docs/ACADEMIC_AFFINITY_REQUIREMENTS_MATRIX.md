@@ -90,3 +90,29 @@ Statuses: `IMPLEMENTED`, `PARTIALLY_IMPLEMENTED`, `NOT_IMPLEMENTED`, `NOT_APPLIC
 | `es_servicio`/`es_cuello_botella`/`requiere_laboratorio`/`tipo_laboratorio` on `cursos` | Curriculum/scheduling concerns, not affinity verification |
 | `jornada`/`condicion_nombramiento`/`quincena`/`numero_accion_personal`/`observacion` on `asignaciones_docentes` | HR/payroll concerns owned by another module |
 | Full JWT/TypeScript stack requirements (SRS §3b) | Cross-module, project-wide technical requirements outside `IMPLEMENT_ACADEMIC_AFFINITIES.md`'s stated scope; not evaluated here. The project-wide external-REST-API requirement (SRS §3b) *is* evaluated here as of Batch 5, since the selected provider (OpenAlex) sits directly on this module's Institution field — see the DO-01 row above |
+
+## Test-level classification (added 2026-08-25)
+
+The `Test` column above names whichever test proves the row. This table
+says at which *level* each business rule is proven, because the SRS
+requires unit tests specifically. **Unit** = isolated PHP, no Laravel
+container, no database, no HTTP, no Livewire, no network (collaborators
+are in-memory fakes under `tests/Unit/**/Fakes`). **Feature** = the same
+rule through routes, Livewire, policies and Eloquent.
+
+| Business rule | Unit test | Feature test |
+|---|---|---|
+| Affinity = exact specialty-ID catalog membership; degree level never decides | `AffinityCatalogVersionMatchingTest`, `RunAffinityVerificationUseCaseTest` | `TeacherAssignmentVerificationTest` |
+| Catalog entry invariants (acuerdo, Gaceta, date range, at least one specialty) and validity boundaries | `AffinityCatalogVersionTest` | `AffinityCatalogVersioningTest` |
+| Overlap detection between validity ranges | `AffinityCatalogVersionTest` (`overlapsRange`) | `AffinityCatalogVersioningTest` |
+| Version resolution incl. D5/D6 fallbacks, boundaries and input-order independence | `CatalogVersionResolverTest` | `TeacherAssignmentVerificationTest` |
+| The four verification outcomes; provisional flag; append-never-overwrite trail | `RunAffinityVerificationUseCaseTest` | `TeacherAssignmentVerificationTest` |
+| DO-02b source-state guard, signed-PDF invariant, deadline invariant, duplicate-note guard | `AttachTechnicalNoteUseCaseTest` | `TechnicalNoteFlowTest`, `TechnicalNoteUploadTest` |
+| Technical Note state machine (ratify / reject / expire, terminal states) | `TechnicalNoteLifecycleTest` | `TechnicalNoteFlowTest` |
+| DO-02d manual approve/reject, decided-once guard, latest-verification eligibility | `DecideNoCatalogAssignmentUseCaseTest` | `NoCatalogDecisionTest` |
+| Corrective edit reruns the algorithm; protected history blocks edit and delete | `TeacherAssignmentCorrectionTest` | `TeacherAssignmentEditDeleteTest` |
+| Audit entry shape (before/after, null sides, system-triggered entries) | `AuditLogEntryTest` | `AcademicCredentialAuditTest` |
+| Credential duplicate rule and change-only auditing | `RegisterAcademicCredentialUseCaseTest`, `EditAcademicCredentialUseCaseTest` | `AcademicCredentialAuditTest` |
+| Institution lookup normalization and bounds (OpenAlex, enrichment-only) | `SearchAcademicInstitutionsUseCaseTest` | `OpenAlexInstitutionSearchAdapterTest`, `InstitutionSearchApiTest` |
+| Closed permission catalog, protected permission/role identity | `PermissionCatalogTest`, `PermissionCatalogStatusTest`, `PermissionEntityTest`, `PermissionUseCasesTest`, `RoleEntityTest` | `PermissionManagementTest`, `AdministradorFullAccessTest` |
+| JWT issuance, subject resolution, expired vs invalid distinction | `JwtTokenServiceTest` | `JwtAuthenticationTest` |

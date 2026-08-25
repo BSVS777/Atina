@@ -628,3 +628,65 @@ No previously-passing test was weakened to reach this result — the one
 test that had to change (`test_an_overdue_pending_note_is_automatically_marked_expired`)
 was corrected because its own setup became invalid under the new
 invariant it did not itself test, not to hide a regression.
+
+## 16. Addendum — 2026-08-25 (Unit-test expansion, SRS §3b "unit tests")
+
+The SRS imposes unit tests as a project-wide technical requirement. This
+pass audited whether the existing suite actually satisfied that at the
+*unit* level, rather than proving the same rules only through Livewire,
+HTTP and Eloquent.
+
+### Audit finding
+
+44 of the 224 tests lived under `tests/Unit`, but 7 of those classes
+extended `Tests\TestCase` — booting the full Laravel application to
+exercise pure PHP. Several central business rules had **no direct unit
+coverage at all** and were reachable only through Feature tests:
+`RunAffinityVerificationUseCase` (the DO-02a decision itself),
+`AttachTechnicalNoteUseCase`, `DecideNoCatalogAssignmentUseCase`,
+`EditTeacherAssignmentUseCase`, `DeleteTeacherAssignmentUseCase`,
+`AssignmentOverview::hasProtectedHistory()`, the `TechnicalNote` state
+machine, `Role`, `JwtTokenService`, `AuditLogEntry` and
+`PermissionLabelFormatter`.
+
+### What changed
+
+- 15 new unit test classes plus 6 in-memory fakes
+  (`tests/Unit/**/Fakes`) implementing the real repository ports.
+- The 7 Laravel-booting "unit" tests now extend
+  `PHPUnit\Framework\TestCase`, proving those rules need no framework.
+- `tests/Unit/ExampleTest.php` no longer declares the inert
+  `RefreshDatabase` trait it never used.
+- **No production code was changed in this pass** — no defect was found
+  that the added tests could prove.
+
+### Test-level classification
+
+| Level | Location | What it proves | Count |
+|---|---|---|---|
+| Unit | `tests/Unit` | Isolated domain/application rules. No container, DB, HTTP, Livewire or network. | 214 tests, 425 assertions, ~0.22 s |
+| Feature / Integration | `tests/Feature` | The same rules through routes, Livewire, policies, Eloquent, DOMPDF and the JWT API (plus `Http::fake()` for OpenAlex). | 180 tests |
+
+### Verification (run live this pass, current HEAD)
+
+- `php artisan test tests/Unit`: **214/214 passing**, 425 assertions,
+  ~0.22 s — the runtime alone evidences the absence of database and
+  framework boot.
+- `php artisan test`: **394/394 passing**, 861 assertions, ~12 s (up
+  from the 224-test baseline; no regressions, no test weakened or
+  removed).
+- `./vendor/bin/phpstan analyse --memory-limit=1G`: 0 errors.
+- `./vendor/bin/pint --test tests/Unit`: clean. The whole-repo run still
+  fails only on the same 18 pre-existing baseline files outside
+  `src/Academic`, none touched here.
+- `npm run typecheck`: 0 errors. `npm run build`: succeeds.
+- Code coverage percentage: **unavailable** — neither Xdebug nor PCOV is
+  loaded in this environment (`php -m`), and installing a coverage driver
+  was out of scope for this pass. No coverage figure is claimed.
+
+### Isolation guarantee
+
+`tests/Unit` contains zero references to `Tests\TestCase`,
+`RefreshDatabase`, `Illuminate\Support\Facades\*`, Livewire or HTTP
+routes; every external collaborator is an in-memory fake implementing the
+production port interface.
