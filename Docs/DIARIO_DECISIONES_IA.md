@@ -3360,3 +3360,51 @@ the catalog id-backed.
 - `php artisan test tests/Feature/Academic tests/Unit/Academic`: 244/244
   passing, 483 assertions.
 - `vendor/bin/phpstan analyse --memory-limit=1G` (whole project): 0 errors.
+
+## 2026-08-26 — Replace the native `<datalist>` specialty picker with a styled combobox
+
+### Asked
+
+"En el form de docentes cuando voy escribiendo la especialidad, no hay
+otra forma de mostrar las coincidencias... se ve feo, parece el tipico
+dialog que recuerda el nombre de usuario en una web" — the `<datalist>`
+introduced in the previous entry technically worked, but its suggestion
+popup is rendered entirely by the browser (unstyleable, and visually
+identical to a native autofill/remembered-value dropdown), not by the
+app.
+
+### Accepted
+
+- Swapped the `<input list="…"><datalist>` pair for a client-side Alpine
+  combobox, reusing the `.institution-suggestions` /
+  `.institution-suggestion-item` styling already built for the OpenAlex
+  Institution field one field below — same visual language, no new CSS
+  component. Renamed the shared CSS comment since it's no longer
+  Institution-only.
+- Filtering is pure client-side (`options.filter(...)` over
+  `@js($specialties->pluck('name'))`), not a Livewire round-trip like the
+  Institution field: the full specialty catalog is already sent to the
+  view on every render (`TeacherProfileComponent::render`), so re-fetching
+  it per keystroke would just be a slower version of what's already in the
+  DOM. Selecting a suggestion or typing writes to `form.specialtyName` via
+  `$wire.set(..., false)` (the `false` keeps it a deferred/local update —
+  no request — matching the original field's non-`.live` `wire:model`
+  semantics; the network round-trip still only happens on `save`).
+- Added `wire:key="credential-specialty-{editingId}-{open/closed}"` on the
+  `x-data` root so Alpine re-initializes (picking up the freshly-loaded
+  `form.specialtyName`) every time the modal is opened for a different
+  credential — Livewire's morphdom otherwise preserves Alpine component
+  state across re-renders and would leave the previous edit's typed text
+  showing. Same pattern already used for the note-upload dropzone in
+  `teacher-assignment-component.blade.php`.
+
+### Verification
+
+- `php artisan test --filter=TeacherProfileComponentTest`: 2/2 passing.
+- `php artisan test --filter=AcademicCredentialSpecialtyEntryTest`: 2/2
+  passing.
+- Could not browser-verify: the connected Chrome instance could not reach
+  `localhost`/`127.0.0.1` on this machine even though `curl` from the
+  local shell got a normal response from `php artisan serve` — likely the
+  automation browser isn't running on this host. Flagged to the user
+  instead of claiming a visual check that didn't happen.
