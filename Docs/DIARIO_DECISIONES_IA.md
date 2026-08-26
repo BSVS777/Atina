@@ -3408,3 +3408,18 @@ app.
   local shell got a normal response from `php artisan serve` — likely the
   automation browser isn't running on this host. Flagged to the user
   instead of claiming a visual check that didn't happen.
+
+### Corrected
+
+- User reported the dropdown rendering on top of the input instead of
+  below it. Root cause: `.form-field` is `display: flex; flex-direction:
+  column`, and `.institution-suggestions` was `position: absolute` with
+  no `top` set, as the last flex child. An absolutely positioned flex
+  child has no in-flow siblings to derive a static position from and
+  collapses to the flex container's start corner — i.e. on top of the
+  label/input, not below whatever precedes it in the markup. Fixed by
+  wrapping just the input and the dropdown in their own non-flex `relative`
+  div, so the dropdown's static position resolves the normal (unambiguous)
+  block-layout way: directly after the input. The same latent risk exists
+  on the Institution field's identical dropdown, left untouched since it
+  wasn't reported as broken and isn't part of this fix.

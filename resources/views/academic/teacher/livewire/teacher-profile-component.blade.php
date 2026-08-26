@@ -58,7 +58,7 @@
 
     @if ($canManage)
     <x-ui.modal :show="$showModal" :title="$editingId === null ? __('New academic credential') : __('Edit academic credential')">
-        <div class="form-field" style="position: relative;"
+        <div class="form-field"
             wire:key="credential-specialty-{{ $editingId ?? 'new' }}-{{ $showModal ? 'open' : 'closed' }}"
             x-data="{
                 open: false,
@@ -76,24 +76,31 @@
             }"
             x-on:click.outside="open = false">
             <label for="credentialSpecialty">{{ __('Specialty') }}</label>
-            <input type="text" id="credentialSpecialty" autocomplete="off"
-                x-model="query"
-                x-on:focus="open = true"
-                x-on:input="open = true; $wire.set('form.specialtyName', $event.target.value, false)"
-                class="{{ $errors->has('form.specialtyName') ? 'has-error' : '' }}">
+            {{-- .form-field is a flex column, so an absolutely positioned child
+                of it has no in-flow siblings to anchor to and collapses to the
+                container's start corner (covering the input). This inner,
+                non-flex wrapper gives the dropdown a normal static position
+                right below the input instead. --}}
+            <div style="position: relative;">
+                <input type="text" id="credentialSpecialty" autocomplete="off"
+                    x-model="query"
+                    x-on:focus="open = true"
+                    x-on:input="open = true; $wire.set('form.specialtyName', $event.target.value, false)"
+                    class="{{ $errors->has('form.specialtyName') ? 'has-error' : '' }}">
+
+                <div class="institution-suggestions" x-show="open && filtered.length" x-cloak>
+                    <template x-for="name in filtered" :key="name">
+                        <button type="button" class="institution-suggestion-item" x-on:click="select(name)">
+                            <span class="institution-suggestion-name" x-text="name"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
             @error('form.specialtyName') <span class="form-error">{{ $message }}</span> @enderror
 
             <p style="margin: 0; font-size: 12.5px; color: var(--textSecondary);">
                 {{ __('Select an existing specialty or type a new one to create it.') }}
             </p>
-
-            <div class="institution-suggestions" x-show="open && filtered.length" x-cloak>
-                <template x-for="name in filtered" :key="name">
-                    <button type="button" class="institution-suggestion-item" x-on:click="select(name)">
-                        <span class="institution-suggestion-name" x-text="name"></span>
-                    </button>
-                </template>
-            </div>
         </div>
         <div class="form-field">
             <label for="credentialDegreeLevel">{{ __('Degree level') }}</label>
