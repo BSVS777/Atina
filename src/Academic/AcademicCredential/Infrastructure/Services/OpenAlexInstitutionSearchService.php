@@ -39,7 +39,17 @@ final class OpenAlexInstitutionSearchService implements InstitutionSearchService
     {
         $cacheKey = 'institution-search:'.md5(mb_strtolower($query)).":{$limit}";
 
-        return Cache::remember($cacheKey, $this->cacheTtlSeconds, fn (): array => $this->fetch($query, $limit));
+        // Cache plain arrays, not InstitutionSearchResult objects: the app's
+        // default cache config (config/cache.php: serializable_classes =>
+        // false) unserializes cached objects into __PHP_Incomplete_Class on
+        // every cache hit, since no class is allowlisted for unserialize.
+        $cached = Cache::remember(
+            $cacheKey,
+            $this->cacheTtlSeconds,
+            fn (): array => array_map(fn (InstitutionSearchResult $result): array => (array) $result, $this->fetch($query, $limit)),
+        );
+
+        return array_map(fn (array $result): InstitutionSearchResult => new InstitutionSearchResult(...$result), $cached);
     }
 
     /**

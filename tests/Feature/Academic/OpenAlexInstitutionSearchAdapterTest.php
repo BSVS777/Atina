@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Academic;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Src\Academic\AcademicCredential\Domain\Exceptions\InstitutionSearchUnavailableException;
@@ -10,10 +11,14 @@ use Src\Academic\AcademicCredential\Infrastructure\Services\OpenAlexInstitutionS
 use Tests\TestCase;
 
 /**
- * Http::fake() only — never depends on live Internet access.
+ * Http::fake() only — never depends on live Internet access. RefreshDatabase
+ * is only needed for the database-cache-store regression test below (the
+ * `cache` table).
  */
 class OpenAlexInstitutionSearchAdapterTest extends TestCase
 {
+    use RefreshDatabase;
+
     private function service(): OpenAlexInstitutionSearchService
     {
         return new OpenAlexInstitutionSearchService(
@@ -143,5 +148,39 @@ class OpenAlexInstitutionSearchAdapterTest extends TestCase
         $this->expectException(InstitutionSearchUnavailableException::class);
 
         $this->service()->search('Universidad Técnica Nacional', 8);
+    }
+
+    /**
+     * Regression test: phpunit.xml runs with CACHE_STORE=array, whose
+     * ArrayStore never actually serializes anything, so it can't catch a
+     * cache that stores real objects. The app's config/cache.php sets
+     * serializable_classes => false, so the database (and every other
+     * serializing) store unserializes any cached object into
+     * __PHP_Incomplete_Class on a cache hit unless the cached payload is
+     * plain arrays/scalars. Switch to the database store here specifically
+     * to exercise that real unserialize path.
+     */
+    public function test_a_cache_hit_against_a_serializing_store_still_returns_result_objects(): void
+    {
+        config(['cache.default' => 'database']);
+
+        Http::fake([
+            'api.openalex.org/*' => Http::response(['results' => [
+                [
+                    'id' => 'https://openalex.org/I1',
+                    'display_name' => 'Universidad Técnica Nacional',
+                    'hint' => 'Costa Rica',
+                ],
+            ]]),
+        ]);
+
+        $service = $this->service();
+
+        $service->search('Universidad', 8);
+        $second = $service->search('Universidad', 8);
+
+        $this->assertContainsOnlyInstancesOf(InstitutionSearchResult::class, $second);
+        $this->assertSame('Universidad Técnica Nacional', $second[0]->name);
+        $this->assertSame('Costa Rica', $second[0]->hint);
     }
 }

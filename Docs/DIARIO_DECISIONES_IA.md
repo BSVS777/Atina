@@ -3420,6 +3420,72 @@ app.
   label/input, not below whatever precedes it in the markup. Fixed by
   wrapping just the input and the dropdown in their own non-flex `relative`
   div, so the dropdown's static position resolves the normal (unambiguous)
-  block-layout way: directly after the input. The same latent risk exists
-  on the Institution field's identical dropdown, left untouched since it
-  wasn't reported as broken and isn't part of this fix.
+  block-layout way: directly after the input.
+
+## 2026-08-26 — Institution dropdown overlap + __PHP_Incomplete_Class on cache hit
+
+### Asked
+
+Follow-up to the specialty dropdown fix: "esta pasando lo mismo con el
+campo de institución" (same overlap) plus a live `TypeError` —
+`updatedFormInstitution()`'s closure required `InstitutionSearchResult`
+but got `__PHP_Incomplete_Class` — reported while typing into the
+Institution field.
+
+### Accepted
+
+- **Overlap**: same root cause and same fix as the specialty field
+  (previous entry) — moved the Institution `<input>` and its
+  `.institution-suggestions` dropdown into their own non-flex `relative`
+  wrapper inside `.form-field`, instead of leaving the dropdown as a bare
+  absolutely-positioned flex child with no `top`.
+- **`__PHP_Incomplete_Class`**: unrelated to the UI change — a real,
+  pre-existing bug in `OpenAlexInstitutionSearchService::search()`, only
+  now hit because caching started returning cache hits during manual
+  testing. It cached `InstitutionSearchResult` *objects* directly via
+  `Cache::remember()`. `config/cache.php` sets `serializable_classes =>
+  false` (Laravel's default protection against unserialize gadget-chain
+  attacks), so `Illuminate\Cache\DatabaseStore::unserialize()` calls
+  `unserialize($value, ['allowed_classes' => false])` on every cache hit
+  — which silently turns any cached object into `__PHP_Incomplete_Class`
+  instead of the real class. Fixed by caching plain arrays (`(array)
+  $result` — safe here since all constructor-promoted properties are
+  `public`) and reconstructing `InstitutionSearchResult` objects
+  (`new InstitutionSearchResult(...$result)`) after the cache read.
+- Confirmed via `DB::table('cache')` that the FQCN stored in the stale
+  rows was correct (not a stale class name from a rename) before landing
+  on the `serializable_classes` explanation — ruled out the more obvious
+  "renamed class, stale cache" theory first.
+- Deleted the 8 stale `institution-search:*` cache rows that were written
+  under the buggy code path (`DB::table('cache')->where('key', 'like',
+  '%institution-search%')->delete()`); new entries are written in the
+  fixed array shape from here on.
+
+### Learning
+
+`phpunit.xml` runs with `CACHE_STORE=array`
+(`Illuminate\Cache\ArrayStore`), which never serializes anything — it
+just holds values in a PHP array in memory. That makes this entire class
+of bug (object caching breaking under any *serializing* store) invisible
+to the suite regardless of coverage. Added
+`test_a_cache_hit_against_a_serializing_store_still_returns_result_objects`
+to `OpenAlexInstitutionSearchAdapterTest`, which overrides
+`cache.default` to `database` for that one test (pulling in
+`RefreshDatabase` for the `cache` table) specifically to exercise the
+real `unserialize(..., ['allowed_classes' => ...])` path — same pattern
+as the earlier `migrate:status`-vs-`:memory:` lesson: the test DB's
+happy-path defaults can hide an entire category of production bug.
+
+### Verification
+
+- `php artisan test --filter=TeacherProfileComponentTest`: 2/2 passing.
+- `php artisan test --filter=AcademicCredentialSpecialtyEntryTest`: 2/2
+  passing.
+- `php artisan test --filter=AcademicCredentialInstitutionSearchTest`:
+  8/8 passing.
+- `php artisan test --filter=OpenAlexInstitutionSearchAdapterTest`: 9/9
+  passing (includes the new regression test).
+- `php artisan test --filter=SearchAcademicInstitutionsUseCaseTest`:
+  10/10 passing.
+- `php artisan test tests/Feature/Academic tests/Unit/Academic`: 245/245
+  passing, 486 assertions.
