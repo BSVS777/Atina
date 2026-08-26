@@ -112,11 +112,31 @@
             </select>
             @error('form.degreeLevel') <span class="form-error">{{ $message }}</span> @enderror
         </div>
-        <div class="form-field" style="position: relative;">
+        <div class="form-field">
             <label for="credentialInstitution">{{ __('Institution') }}</label>
-            <input type="text" id="credentialInstitution" autocomplete="off"
-                wire:model.live.debounce.400ms="form.institution"
-                class="{{ $errors->has('form.institution') ? 'has-error' : '' }}">
+            {{-- .form-field is a flex column, so an absolutely positioned child
+                of it has no in-flow siblings to anchor to and collapses to the
+                container's start corner (covering the input). This inner,
+                non-flex wrapper gives the dropdown a normal static position
+                right below the input instead. --}}
+            <div style="position: relative;">
+                <input type="text" id="credentialInstitution" autocomplete="off"
+                    wire:model.live.debounce.400ms="form.institution"
+                    class="{{ $errors->has('form.institution') ? 'has-error' : '' }}">
+
+                @if (! empty($institutionSuggestions))
+                <div class="institution-suggestions" wire:loading.remove wire:target="form.institution">
+                    @foreach ($institutionSuggestions as $suggestion)
+                    <button type="button" class="institution-suggestion-item" wire:click="selectInstitution(@js($suggestion['name']))">
+                        <span class="institution-suggestion-name">{{ $suggestion['name'] }}</span>
+                        @if ($suggestion['hint'])
+                        <span class="institution-suggestion-hint">{{ $suggestion['hint'] }}</span>
+                        @endif
+                    </button>
+                    @endforeach
+                </div>
+                @endif
+            </div>
             @error('form.institution') <span class="form-error">{{ $message }}</span> @enderror
 
             <p style="margin: 0; font-size: 12.5px; color: var(--textSecondary);">
@@ -137,19 +157,6 @@
             <p style="margin: 0; font-size: 12.5px; color: var(--textSecondary);" wire:loading.remove wire:target="form.institution">
                 {{ __('No matching institutions found. You can still type the institution manually.') }}
             </p>
-            @endif
-
-            @if (! empty($institutionSuggestions))
-            <div class="institution-suggestions" wire:loading.remove wire:target="form.institution">
-                @foreach ($institutionSuggestions as $suggestion)
-                <button type="button" class="institution-suggestion-item" wire:click="selectInstitution(@js($suggestion['name']))">
-                    <span class="institution-suggestion-name">{{ $suggestion['name'] }}</span>
-                    @if ($suggestion['hint'])
-                    <span class="institution-suggestion-hint">{{ $suggestion['hint'] }}</span>
-                    @endif
-                </button>
-                @endforeach
-            </div>
             @endif
         </div>
         <div class="form-field">
