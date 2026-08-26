@@ -150,7 +150,7 @@ return [
         'secondLastName' => 'segundo apellido',
         'estimatedWorkload' => 'jornada estimada',
         'active' => 'activo',
-        'specialtyId' => 'especialidad',
+        'specialtyName' => 'especialidad',
         'degreeLevel' => 'grado académico',
         'institution' => 'institución',
         'startDate' => 'fecha de inicio',

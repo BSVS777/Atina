@@ -91,7 +91,7 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
         $this->actingAs($user);
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->set('form.specialtyId', $specialty->id)
+            ->set('form.specialtyName', $specialty->name)
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'Instituto Nacional de Aprendizaje')
             ->set('form.startDate', '2015-03-01')
@@ -117,7 +117,7 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
         $this->actingAs($user);
 
         $component = Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->set('form.specialtyId', $specialty->id)
+            ->set('form.specialtyName', $specialty->name)
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'Universidad Técnica Nacional')
             ->assertSet('institutionSearchUnavailable', true)
@@ -148,7 +148,7 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
         $this->actingAs($user);
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->set('form.specialtyId', $specialty->id)
+            ->set('form.specialtyName', $specialty->name)
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'Universidad Nacional')
             ->assertSet('institutionSuggestions.0.name', 'Universidad Nacional')
@@ -175,7 +175,7 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
             ->call('openCreateModal')
-            ->set('form.specialtyId', $specialty->id)
+            ->set('form.specialtyName', $specialty->name)
             ->set('form.degreeLevel', DegreeLevel::Bachelor->value)
             ->set('form.institution', '123456')
             ->set('form.startDate', '2015-03-01')
@@ -197,7 +197,7 @@ class AcademicCredentialInstitutionSearchTest extends TestCase
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
             ->call('openCreateModal')
-            ->set('form.specialtyId', $specialty->id)
+            ->set('form.specialtyName', $specialty->name)
             ->set('form.degreeLevel', DegreeLevel::Bachelor->value)
             ->set('form.institution', 'Sede Regional 2')
             ->set('form.startDate', '2015-03-01')

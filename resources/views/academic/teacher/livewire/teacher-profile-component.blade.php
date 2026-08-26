@@ -60,13 +60,19 @@
     <x-ui.modal :show="$showModal" :title="$editingId === null ? __('New academic credential') : __('Edit academic credential')">
         <div class="form-field">
             <label for="credentialSpecialty">{{ __('Specialty') }}</label>
-            <select id="credentialSpecialty" wire:model="form.specialtyId" class="{{ $errors->has('form.specialtyId') ? 'has-error' : '' }}">
-                <option value="">{{ __('Select a specialty') }}</option>
+            <input type="text" id="credentialSpecialty" list="credentialSpecialtyOptions" autocomplete="off"
+                wire:model="form.specialtyName"
+                class="{{ $errors->has('form.specialtyName') ? 'has-error' : '' }}">
+            <datalist id="credentialSpecialtyOptions">
                 @foreach ($specialties as $specialty)
-                <option value="{{ $specialty->id }}">{{ $specialty->name }}</option>
+                <option value="{{ $specialty->name }}"></option>
                 @endforeach
-            </select>
-            @error('form.specialtyId') <span class="form-error">{{ $message }}</span> @enderror
+            </datalist>
+            @error('form.specialtyName') <span class="form-error">{{ $message }}</span> @enderror
+
+            <p style="margin: 0; font-size: 12.5px; color: var(--textSecondary);">
+                {{ __('Select an existing specialty or type a new one to create it.') }}
+            </p>
         </div>
         <div class="form-field">
             <label for="credentialDegreeLevel">{{ __('Degree level') }}</label>

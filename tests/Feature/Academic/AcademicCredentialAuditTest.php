@@ -26,7 +26,7 @@ class AcademicCredentialAuditTest extends TestCase
         $this->actingAs($user);
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->set('form.specialtyId', $specialty->id)
+            ->set('form.specialtyName', $specialty->name)
             ->set('form.degreeLevel', DegreeLevel::Master->value)
             ->set('form.institution', 'UCR')
             ->set('form.startDate', '2014-03-01')
@@ -86,7 +86,7 @@ class AcademicCredentialAuditTest extends TestCase
         $this->actingAs($user);
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->set('form.specialtyId', $specialty->id)
+            ->set('form.specialtyName', $specialty->name)
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'UTN')
             ->set('form.startDate', '2015-03-01')

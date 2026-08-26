@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Academic;
 
-use App\Models\AcademicCredential;
 use App\Models\Permission;
 use App\Models\Specialty;
 use App\Models\Teacher;
@@ -13,49 +12,23 @@ use Src\Academic\AcademicCredential\Domain\DegreeLevel;
 use Src\Academic\Teacher\Presentation\Livewire\TeacherProfileComponent;
 use Tests\TestCase;
 
-class AcademicCredentialAuthorizationTest extends TestCase
+/**
+ * Specialty stays an id-backed catalog (also used by the affinity catalog)
+ * even though the user types a plain name: typing a new name creates the
+ * catalog row instead of leaving free text on the credential.
+ */
+class AcademicCredentialSpecialtyEntryTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_a_user_without_permission_cannot_open_the_create_modal(): void
-    {
-        $user = User::factory()->create();
-        $teacher = Teacher::factory()->create();
-        $this->actingAs($user);
-
-        Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->call('openCreateModal')
-            ->assertForbidden();
-    }
-
-    public function test_a_user_without_permission_cannot_save_by_manipulating_component_state(): void
-    {
-        $user = User::factory()->create();
-        $teacher = Teacher::factory()->create();
-        $specialty = Specialty::factory()->create();
-        $this->actingAs($user);
-
-        Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->set('form.specialtyName', $specialty->name)
-            ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
-            ->set('form.institution', 'UTN')
-            ->set('form.startDate', '2015-03-01')
-            ->set('form.endDate', '2020-11-30')
-            ->call('save')
-            ->assertForbidden();
-
-        $this->assertDatabaseCount('atestados', 0);
-    }
-
-    public function test_a_user_with_permission_can_create_a_credential(): void
+    public function test_typing_a_new_specialty_name_creates_it_and_links_the_credential(): void
     {
         $user = $this->userWithAcademicCredentialPermissions();
         $teacher = Teacher::factory()->create();
-        $specialty = Specialty::factory()->create();
         $this->actingAs($user);
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->set('form.specialtyName', $specialty->name)
+            ->set('form.specialtyName', 'Ingeniería en Robótica')
             ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
             ->set('form.institution', 'UTN')
             ->set('form.startDate', '2015-03-01')
@@ -63,23 +36,35 @@ class AcademicCredentialAuthorizationTest extends TestCase
             ->call('save')
             ->assertHasNoErrors();
 
+        $specialty = Specialty::query()->where('nombre', 'Ingeniería en Robótica')->firstOrFail();
+
         $this->assertDatabaseHas('atestados', [
             'docente_id' => $teacher->id,
             'especialidad_id' => $specialty->id,
-            'institucion' => 'UTN',
         ]);
     }
 
-    public function test_a_user_without_edit_permission_cannot_update_an_existing_credential(): void
+    public function test_typing_an_existing_specialty_name_reuses_it_without_duplicating(): void
     {
-        $user = User::factory()->create();
+        $user = $this->userWithAcademicCredentialPermissions();
         $teacher = Teacher::factory()->create();
-        $credential = AcademicCredential::factory()->create(['docente_id' => $teacher->id]);
+        $specialty = Specialty::factory()->create(['name' => 'Ingeniería Industrial']);
         $this->actingAs($user);
 
         Livewire::test(TeacherProfileComponent::class, ['teacher' => $teacher])
-            ->call('openEditModal', $credential->id)
-            ->assertForbidden();
+            ->set('form.specialtyName', 'Ingeniería Industrial')
+            ->set('form.degreeLevel', DegreeLevel::Licentiate->value)
+            ->set('form.institution', 'UTN')
+            ->set('form.startDate', '2015-03-01')
+            ->set('form.endDate', '2020-11-30')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseCount('especialidades', 1);
+        $this->assertDatabaseHas('atestados', [
+            'docente_id' => $teacher->id,
+            'especialidad_id' => $specialty->id,
+        ]);
     }
 
     private function userWithAcademicCredentialPermissions(): User

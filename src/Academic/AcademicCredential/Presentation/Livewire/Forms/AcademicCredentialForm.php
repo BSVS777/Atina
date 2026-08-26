@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Src\Academic\AcademicCredential\Presentation\Livewire\Forms;
 
+use App\Models\Specialty;
 use DateTimeImmutable;
 use Illuminate\Validation\Rule;
 use Livewire\Form;
@@ -13,7 +14,7 @@ use Src\Academic\AcademicCredential\Domain\Entities\AcademicCredential;
 
 class AcademicCredentialForm extends Form
 {
-    public ?int $specialtyId = null;
+    public string $specialtyName = '';
 
     public string $degreeLevel = '';
 
@@ -29,7 +30,7 @@ class AcademicCredentialForm extends Form
     public function rules(): array
     {
         return [
-            'specialtyId' => ['required', 'integer', 'exists:especialidades,id'],
+            'specialtyName' => ['required', 'string', 'max:180', 'regex:/\p{L}/u'],
             'degreeLevel' => ['required', Rule::enum(DegreeLevel::class)],
             'institution' => ['required', 'string', 'max:150', 'regex:/\p{L}/u'],
             'startDate' => ['required', 'date', 'after_or_equal:1950-01-01', 'before_or_equal:endDate'],
@@ -43,6 +44,7 @@ class AcademicCredentialForm extends Form
     public function messages(): array
     {
         return [
+            'specialtyName.regex' => __('The specialty must contain letters, not only numbers.'),
             'institution.regex' => __('The institution must contain letters, not only numbers.'),
             'startDate.before_or_equal' => __('The start date must be before or the same as the end date.'),
             'endDate.after_or_equal' => __('The end date must be after or the same as the start date.'),
@@ -52,7 +54,7 @@ class AcademicCredentialForm extends Form
 
     public function fromEntity(AcademicCredential $credential): void
     {
-        $this->specialtyId = $credential->specialtyId();
+        $this->specialtyName = Specialty::find($credential->specialtyId())->name ?? '';
         $this->degreeLevel = $credential->degreeLevel()->value;
         $this->institution = $credential->institution();
         $this->startDate = $credential->studyPeriod()->startDate()->format('Y-m-d');
@@ -63,11 +65,27 @@ class AcademicCredentialForm extends Form
     {
         return new AcademicCredentialDTO(
             teacherId: $teacherId,
-            specialtyId: (int) $this->specialtyId,
+            specialtyId: $this->resolveSpecialtyId(),
             degreeLevel: DegreeLevel::from($this->degreeLevel),
             institution: $this->institution,
             startDate: new DateTimeImmutable($this->startDate),
             endDate: new DateTimeImmutable($this->endDate),
         );
+    }
+
+    /**
+     * Specialties stay a shared, id-backed catalog (also used by the
+     * affinity catalog) even though the user types a plain name: reuse the
+     * matching row when one exists, otherwise create it, rather than
+     * storing free text on the credential.
+     */
+    private function resolveSpecialtyId(): int
+    {
+        $name = trim($this->specialtyName);
+
+        $specialty = Specialty::query()->where('nombre', $name)->first()
+            ?? Specialty::create(['name' => $name]);
+
+        return $specialty->id;
     }
 }

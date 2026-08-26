@@ -3291,3 +3291,72 @@ that was committed but never run against a real dev/prod database — tests
 always see the fully-migrated schema, so this exact class of drift is
 structurally invisible to `php artisan test` alone. `migrate:status` is
 the check that actually catches it.
+
+## 2026-08-26 — Manual specialty entry on the teacher academic-credential form
+
+### Asked
+
+"En docentes la especialidad debe poderse ingresar manualmente" — the
+academic-credential modal (`TeacherProfileComponent`) only let the user
+pick a specialty from a fixed `<select>` bound to `especialidades.id`.
+
+### Rejected
+
+Plain free-text (a string column on `atestados`, no relation to
+`especialidades`) — proposed as the simpler reading of "manual entry".
+`especialidades` is also the join target of
+`catalogo_atinencia_especialidad` (DO-02's affinity catalog, see
+`RunAffinityVerificationUseCase::isAffineToSpecialty`), so a specialty that
+only exists as a typo'd string on one credential could never match a
+course's affinity catalog. Confirmed the intended behavior with the user
+before implementing; free text was explicitly declined in favor of keeping
+the catalog id-backed.
+
+### Accepted
+
+- Combobox pattern, mirroring the existing OpenAlex-backed Institution
+  field: `AcademicCredentialForm` now exposes `specialtyName` (string,
+  required, must contain a letter) instead of `specialtyId` (int,
+  `exists:especialidades,id`). `toDto()` resolves the typed name to an id
+  via `resolveSpecialtyId()` — reuses the matching `especialidades.nombre`
+  row if one exists, otherwise creates it — so the FK into
+  `especialidades` (and therefore the affinity catalog join) stays intact
+  either way.
+- The view (`teacher-profile-component.blade.php`) swaps the `<select>`
+  for a text input with a `<datalist>` of existing specialty names, so
+  users can still pick from the catalog by typing or browsing the
+  suggestions, but aren't blocked from adding a new one.
+- `DuplicateCredentialException` is now attached to `form.specialtyName`
+  (was `form.specialtyId`) since that field no longer exists on the form.
+- Updated the four Livewire tests that set `form.specialtyId` directly
+  (`AcademicCredentialInstitutionSearchTest`, `AcademicCredentialAuditTest`,
+  `AcademicCredentialAuthorizationTest`) to set `form.specialtyName` with
+  the factory specialty's name instead.
+- Added `AcademicCredentialSpecialtyEntryTest` covering both branches: a
+  brand-new name creates exactly one new `especialidades` row and links
+  it; an existing name (even after `save`) reuses the existing row rather
+  than duplicating it.
+
+### Corrected
+
+- PHPStan (`nullsafe.neverNull`) flagged
+  `Specialty::find($id)?->name ?? ''` in `fromEntity()`. Not a Larastan
+  quirk: in PHP, the left operand of `??` is evaluated in `isset()`-like
+  mode, so `Specialty::find($id)->name ?? ''` is already null-safe without
+  `?->` even though `find()` returns `Specialty|null` — confirmed the
+  return type is genuinely nullable via `\PHPStan\dumpType()` before
+  concluding the nullsafe operator itself was the redundant part, not the
+  null-check. Simplified to `Specialty::find($id)->name ?? ''`.
+- `composer lint` runs Pint before PHPStan and Pint reformatted 18
+  unrelated files across `IdentityAccess`/`Shared`/bootstrap on its first
+  run (pre-existing style debt, not touched by this change). Reverted
+  those files with `git checkout --` (confirmed with the user first) to
+  keep the diff scoped to the actual change; verified with
+  `vendor/bin/phpstan analyse` directly afterward instead of the combined
+  `composer lint` script.
+
+### Verification
+
+- `php artisan test tests/Feature/Academic tests/Unit/Academic`: 244/244
+  passing, 483 assertions.
+- `vendor/bin/phpstan analyse --memory-limit=1G` (whole project): 0 errors.

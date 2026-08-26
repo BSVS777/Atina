@@ -144,7 +144,7 @@ class TeacherProfileComponent extends Component
                 $editUseCase->handle($this->editingId, $this->form->toDto($this->teacher->id), $actorUserId);
             }
         } catch (DuplicateCredentialException $e) {
-            $this->addError('form.specialtyId', $e->getMessage());
+            $this->addError('form.specialtyName', $e->getMessage());
 
             return;
         }
